@@ -57,7 +57,7 @@ source "amazon-ebs" "plane_aws_ami" {
   instance_type = "t3a.medium"
   encrypt_boot  = false
   ami_regions   = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
-  ami_owners    = "all"
+  ami_groups    = "all"
 
   launch_block_device_mappings {
     device_name           = "/dev/sda1"
