@@ -57,6 +57,14 @@ source "amazon-ebs" "plane_aws_ami" {
   instance_type = "t3a.medium"
   encrypt_boot  = false
 
+  launch_block_device_mappings {
+    device_name           = "/dev/sda1"
+    volume_size          = 15
+    volume_type          = "gp3"
+    delete_on_termination = true
+    encrypted            = false
+  }
+
   vpc_filter {
     filters = {
       "cidr": var.vpc_cidr
