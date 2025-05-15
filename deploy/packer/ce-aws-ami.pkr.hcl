@@ -55,6 +55,7 @@ source "amazon-ebs" "plane_aws_ami" {
   region        = var.aws_region
   ami_name      = "${var.ami_name_prefix}-${local.timestamp}"
   instance_type = "t3a.medium"
+  encrypt_boot  = false
 
   vpc_filter {
     filters = {
@@ -83,6 +84,12 @@ source "amazon-ebs" "plane_aws_ami" {
   ssh_username = "ubuntu"
   
   tags = {
+    Name        = "${var.ami_name_prefix}-${local.timestamp}"
+    Environment = "Production"
+    Builder     = "Packer"
+  }
+
+  snapshot_tags = {
     Name        = "${var.ami_name_prefix}-${local.timestamp}"
     Environment = "Production"
     Builder     = "Packer"
