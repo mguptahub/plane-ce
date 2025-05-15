@@ -3,6 +3,11 @@ name: Appliance Build CE
 on:
   workflow_dispatch:
     inputs:
+      branch_tag:
+        description: 'Branch Tag'
+        required: true
+        type: string
+        default: 'v0.26.0'
       build_aws_appliance:
         description: 'Build AWS Appliance'
         required: true
@@ -67,7 +72,7 @@ jobs:
       - name: Prepare Environment
         id: set_env_variables
         run: |
-          TAG_NAME=${{ github.ref_name }}
+          TAG_NAME=${{ inputs.branch_tag }}
           TAG_NAME=${TAG_NAME//\//-}
           echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_OUTPUT
 
