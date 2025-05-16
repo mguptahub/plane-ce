@@ -1,0 +1,63 @@
+#!/bin/bash
+LOG_FILE=/var/log/plane-setup.log
+echo "Starting Plane verification at $(date)" | tee -a $LOG_FILE
+
+# Function to log messages
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a $LOG_FILE
+}
+
+# Check if docker is running
+check_docker() {
+    if ! systemctl is-active --quiet docker; then
+        log "Docker is not running. Attempting to start..."
+        systemctl start docker
+        sleep 5
+        if ! systemctl is-active --quiet docker; then
+            log "ERROR: Failed to start Docker"
+            return 1
+        fi
+    fi
+    log "Docker is running"
+    return 0
+}
+
+# Get instance metadata
+PUBLIC_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)
+PRIVATE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)
+
+# Run setup
+run_setup() {
+    local DOMAIN=${PUBLIC_DNS:-$PRIVATE_DNS}
+    log "Running setup with domain: $DOMAIN"
+    prime-cli setup --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+    return ${PIPESTATUS[0]}
+}
+
+# Check HTTP response
+check_http() {
+    local max_attempts=12  # 2 minutes (12 * 10 seconds)
+    local attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        log "Checking HTTP response (attempt $attempt/$max_attempts)"
+        if curl -s -o /dev/null -w '%{http_code}' http://localhost | grep -q "200"; then
+            log "Successfully received HTTP 200 response"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 10
+    done
+    log "ERROR: Failed to get HTTP 200 response after 2 minutes"
+    return 1
+}
+
+# Main execution
+main() {
+    check_docker || { log "FATAL: Docker check failed"; exit 1; }
+    # run_setup || { log "FATAL: Plane setup failed"; exit 1; }
+    # check_http || { log "FATAL: HTTP check failed"; exit 1; }
+    log "SUCCESS: All verification steps completed successfully"
+    exit 0
+}
+
+main

@@ -68,7 +68,7 @@ jobs:
       - name: Copy Upload Assets
         run: |
           mkdir -p plane-dist
-          cp -r deploy/packer/plane-ee.sh plane-dist/
+          cp deploy/packer/cloudinit-ee/* plane-dist/
 
       - name: Run `packer init`
         id: init
