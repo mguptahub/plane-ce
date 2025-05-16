@@ -8,10 +8,6 @@ on:
         required: true
         type: boolean
         default: false
-      ami_name_prefix:
-        description: 'AMI Name Prefix'
-        required: true
-        default: 'plane-commercial'
       aws_manifest_bucket:
         description: 'AWS Manifest Bucket'
         required: true
@@ -34,8 +30,6 @@ on:
         default: 'us-east-1'
 
 env:
-  AMI_NAME_PREFIX: ${{ inputs.ami_name_prefix || 'plane-commercial' }}
-  
   AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
   AWS_SECRET_KEY: ${{ secrets.PLANE_DEV_AWS_SECRET_ACCESS_KEY }}
   AWS_MANIFEST_BUCKET: ${{ inputs.aws_manifest_bucket || 'plane-terraform-state-dev' }}
@@ -71,6 +65,10 @@ jobs:
         id: setup
         with:
           version: latest
+      - name: Copy Upload Assets
+        run: |
+          mkdir -p plane-dist
+          cp -r deploy/packer/plane-ee.sh plane-dist/
 
       - name: Run `packer init`
         id: init
@@ -83,13 +81,10 @@ jobs:
       - name: Run `packer build`
         id: build
         run: |
-          mkdir -p plane-dist
-          cp -r deploy/packer/plane-ee.sh plane-dist/
-
           packer build \
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
-            -var "ami_name_prefix=${{ env.AMI_NAME_PREFIX }}" \
+            -var "ami_name_prefix=plane-commercial" \
             -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
             -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
             -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
