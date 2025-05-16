@@ -30,7 +30,11 @@ PRIVATE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)
 run_setup() {
     local DOMAIN=${PUBLIC_DNS:-$PRIVATE_DNS}
     log "Running setup with domain: $DOMAIN"
-    prime-cli setup --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+    if [ ! -f /opt/plane/.config.env ]; then
+        prime-cli setup --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+    else
+        log "Plane is already setup"
+    fi
     return ${PIPESTATUS[0]}
 }
 
@@ -54,8 +58,8 @@ check_http() {
 # Main execution
 main() {
     check_docker || { log "FATAL: Docker check failed"; exit 1; }
-    # run_setup || { log "FATAL: Plane setup failed"; exit 1; }
-    # check_http || { log "FATAL: HTTP check failed"; exit 1; }
+    run_setup || { log "FATAL: Plane setup failed"; exit 1; }
+    check_http || { log "FATAL: HTTP check failed"; exit 1; }
     log "SUCCESS: All verification steps completed successfully"
     exit 0
 }

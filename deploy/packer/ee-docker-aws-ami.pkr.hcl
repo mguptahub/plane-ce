@@ -144,7 +144,7 @@ build {
     inline = [
       "sudo mv /home/ubuntu/cloud-init/cli-download /usr/local/bin/cli-download",
       "sudo chmod +x /usr/local/bin/cli-download",
-      "sudo mv /home/ubuntu/cloud-init/99_custom.cfg /etc/cloud/cloud.cfg.d/99_custom.cfg",
+      "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
       # "sudo cp /home/ubuntu/cloud-init/fetch-instance-metadata /usr/local/bin/fetch-instance-metadata",
       # "sudo chmod +x /usr/local/bin/fetch-instance-metadata",
       # "sudo cp /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
