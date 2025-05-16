@@ -33,10 +33,10 @@ on:
         description: 'AWS VPC Region'
         required: true
         default: 'us-east-1'
-      ami_regions:
-        description: 'AMI Publish Regions (comma separated)'
-        required: true
-        default: 'us-east-1'
+      # ami_regions:
+      #   description: 'AMI Publish Regions (comma separated)'
+      #   required: true
+      #   default: 'us-east-1'
 
 env:
   AMI_NAME_PREFIX: ${{ inputs.ami_name_prefix || 'plane-ce' }}
@@ -49,7 +49,7 @@ env:
   AWS_SUBNET_CIDR: ${{ inputs.aws_subnet_cidr || '10.22.1.0/24' }}
   AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
   AWS_BASE_IMAGE_OWNER: '099720109477'
-  AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
+  # AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
 jobs:
   build_setup:
     if: inputs.build_aws_appliance_ce == true
@@ -301,7 +301,6 @@ jobs:
             -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
             -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
             -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
-            -var "ami_regions=${{ env.AMI_REGIONS }}" \
             ./deploy/packer/ce-aws-ami.pkr.hcl
 
       - name: Cleanup Old AMIs
