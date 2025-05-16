@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/verify-plane-setup
+ExecStart=/bin/sh -c 'sudo /usr/local/bin/verify-plane-setup'
 RemainAfterExit=yes
 
 [Install]
