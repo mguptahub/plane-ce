@@ -1,0 +1,12 @@
+[Unit]
+Description=Plane Setup Verification
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/verify-plane-setup
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

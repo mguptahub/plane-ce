@@ -145,10 +145,11 @@ build {
       "sudo mv /home/ubuntu/cloud-init/cli-download /usr/local/bin/cli-download",
       "sudo chmod +x /usr/local/bin/cli-download",
       "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
-      # "sudo cp /home/ubuntu/cloud-init/fetch-instance-metadata /usr/local/bin/fetch-instance-metadata",
-      # "sudo chmod +x /usr/local/bin/fetch-instance-metadata",
-      # "sudo cp /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
-      # "sudo chmod +x /usr/local/bin/verify-plane-setup"
+      "sudo cp /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
+      "sudo chmod +x /usr/local/bin/verify-plane-setup",
+      "sudo cp /home/ubuntu/cloud-init/plane-verify.service /etc/systemd/system/plane-verify.service",
+      # "sudo systemctl enable plane-verify.service",
+      # "sudo systemctl start plane-verify.service"
     ]
   }
 
@@ -162,26 +163,6 @@ build {
   #   ]
   # }
 
-  # # Create a systemd service for the verification
-  # provisioner "shell" {
-  #   inline = [
-  #     "sudo tee /etc/systemd/system/plane-verify.service << 'EOF'",
-  #     "[Unit]",
-  #     "Description=Plane Setup Verification",
-  #     "After=network-online.target docker.service",
-  #     "Wants=network-online.target",
-  #     "",
-  #     "[Service]",
-  #     "Type=oneshot",
-  #     "ExecStart=/usr/local/bin/verify-plane-setup",
-  #     "RemainAfterExit=yes",
-  #     "",
-  #     "[Install]",
-  #     "WantedBy=multi-user.target",
-  #     "EOF",
-  #     "sudo systemctl enable plane-verify.service"
-  #   ]
-  # }
 
   # Post-processor for potential AMI modifications
   post-processor "manifest" {
