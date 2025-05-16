@@ -1,4 +1,4 @@
-name: Appliance Build CE
+name: Appliance Build Non Docker
 
 on:
   workflow_dispatch:
@@ -8,13 +8,8 @@ on:
         required: true
         type: string
         default: 'v0.26.0'
-      build_aws_appliance:
-        description: 'Build AWS Appliance'
-        required: true
-        type: boolean
-        default: false
-      build_do_appliance:
-        description: 'Build Digital Ocean Appliance'
+      build_aws_appliance_ce:
+        description: 'Build Plane-CE AWS Appliance'
         required: true
         type: boolean
         default: false
@@ -38,28 +33,26 @@ on:
         description: 'AWS VPC Region'
         required: true
         default: 'us-east-1'
-      do_region:
-        description: 'Digital Ocean Region'
+      ami_regions:
+        description: 'AMI Publish Regions (comma separated)'
         required: true
-        default: 'BLR1'
+        default: 'us-east-1'
 
 env:
   AMI_NAME_PREFIX: ${{ inputs.ami_name_prefix || 'plane-ce' }}
   
   AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
   AWS_SECRET_KEY: ${{ secrets.PLANE_DEV_AWS_SECRET_ACCESS_KEY }}
-  AWS_MANIFEST_BUCKET: plane-terraform-state-dev
+  AWS_MANIFEST_BUCKET: ${{ inputs.aws_manifest_bucket || 'plane-terraform-state-dev' }}
 
   AWS_VPC_CIDR: ${{ inputs.aws_vpc_cidr || '10.22.0.0/16' }}
   AWS_SUBNET_CIDR: ${{ inputs.aws_subnet_cidr || '10.22.1.0/24' }}
   AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
   AWS_BASE_IMAGE_OWNER: '099720109477'
-  
-  DO_REGION: ${{ inputs.do_region || 'BLR1' }}
-  DO_TOKEN: ${{ secrets.PLANE_DEV_DIGITAL_OCEAN_TOKEN }}
-
+  AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
 jobs:
   build_setup:
+    if: inputs.build_aws_appliance_ce == true
     runs-on: ubuntu-22.04
     outputs:
       tag_name: ${{ steps.set_env_variables.outputs.TAG_NAME }}
@@ -83,6 +76,7 @@ jobs:
           echo "LIVE_IMAGE=makeplane/plane-live" >> $GITHUB_OUTPUT
 
   package_admin:
+    if: inputs.build_aws_appliance_ce == true
     needs: build_setup
     runs-on: ubuntu-22.04
     steps:
@@ -114,6 +108,7 @@ jobs:
           retention-days: 1
     
   package_web:
+    if: inputs.build_aws_appliance_ce == true
     needs: build_setup
     runs-on: ubuntu-22.04
     steps:
@@ -145,6 +140,7 @@ jobs:
           retention-days: 1
 
   package_space:
+    if: inputs.build_aws_appliance_ce == true
     needs: build_setup
     runs-on: ubuntu-22.04
     steps:
@@ -176,6 +172,7 @@ jobs:
           retention-days: 1
  
   package_live:
+    if: inputs.build_aws_appliance_ce == true
     needs: build_setup
     runs-on: ubuntu-22.04
     steps:
@@ -207,6 +204,7 @@ jobs:
           retention-days: 1
 
   package_backend:
+    if: inputs.build_aws_appliance_ce == true
     needs: build_setup
     runs-on: ubuntu-22.04
     steps:
@@ -237,124 +235,8 @@ jobs:
           path: backend-dist.tar.gz
           retention-days: 1
   
-  build_do_appliance:
-    if: inputs.build_do_appliance == true
-    needs: [build_setup, package_admin, package_web, package_space, package_live, package_backend]
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: '*-dist'
-          path: artifacts
-
-      - name: Extract All Builds
-        run: |
-          # Create local directories
-          mkdir -p plane-dist
-
-          for dist in admin-dist web-dist space-dist live-dist backend-dist; do
-            mv artifacts/${dist}/${dist}.tar.gz plane-dist/
-          done
-          cp -r ./deploy/packer/envs/*.env plane-dist/
-          cp -r ./deploy/packer/svc/*.service plane-dist/
-          cp ./deploy/packer/Caddyfile-ce plane-dist/Caddyfile
-          cp ./deploy/packer/plane-ce.sh plane-dist/
-          
-          # Cleanup directories
-          rm -rf artifacts 
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
-          aws-region: ${{ env.AWS_VPC_REGION }}
-
-      - name: Download Previous Manifest
-        run: |
-          # Download the previous manifest from S3 if it exists
-          aws s3 cp s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-ce/ami/manifests/ce-digital-ocean-latest-manifest.json ./ce-digital-ocean-previous-manifest.json || true
-
-      - name: Setup `packer`
-        uses: hashicorp/setup-packer@main
-        id: setup
-        with:
-          version: latest
-
-      - name: Run `packer init`
-        id: init
-        run: "packer init ./deploy/packer/ce-digital-ocean.pkr.hcl"
-
-      - name: Run `packer validate`
-        id: validate
-        run: "packer validate ./deploy/packer/ce-digital-ocean.pkr.hcl"
-
-      - name: Run `packer build`
-        id: build
-        run: |
-          packer build \
-            -var "do_token=${{ env.DO_TOKEN }}" \
-            -var "do_region=${{ env.DO_REGION }}" \
-            -var "ami_name_prefix=${{ env.AMI_NAME_PREFIX }}-${{ needs.build_setup.outputs.tag_name }}" \
-            ./deploy/packer/ce-digital-ocean.pkr.hcl
-
-      - name: Extract AMI Information
-        id: ami_info
-        run: |
-          # Extract AMI ID and other details from manifest
-          AMI_ID=$(jq -r '.builds[-1].artifact_id' ce-digital-ocean-manifest.json | cut -d ":" -f2)
-          AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ce-digital-ocean-manifest.json)
-          REGION=$(jq -r '.builds[-1].custom_data.region' ce-digital-ocean-manifest.json)
-          BUILD_TIME=$(jq -r '.builds[-1].build_time' ce-digital-ocean-manifest.json)
-          
-          # Add git information to manifest
-          jq --arg branch "${{ github.ref_name }}" \
-             --arg commit "${{ github.sha }}" \
-             --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-             '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
-             ce-digital-ocean-manifest.json > enhanced-ce-digital-ocean-manifest.json
-          mv enhanced-ce-digital-ocean-manifest.json ce-digital-ocean-manifest.json
-         
-          echo "AMI_ID=${AMI_ID}" >> $GITHUB_OUTPUT
-          echo "AMI_NAME=${AMI_NAME}" >> $GITHUB_OUTPUT
-          echo "REGION=${REGION}" >> $GITHUB_OUTPUT
-          
-          echo "✅ AMI built successfully!"
-          echo "🔹 AMI ID: ${DROPLET_ID}"
-          echo "🔹 AMI Name: ${DROPLET_NAME}"
-          echo "🔹 Region: ${DROPLET_REGION}"
-          echo "🔹 Build Time: ${BUILD_TIME}"
-
-      - name: Store Manifest in S3
-        run: |
-          # Store the current manifest as latest
-          aws s3 cp ce-digital-ocean-manifest.json s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-ce/ami/manifests/ce-digital-ocean-latest-manifest.json
-          
-          # Also store a versioned copy
-          aws s3 cp ce-digital-ocean-manifest.json "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-ce/ami/manifests/ce-digital-ocean-manifest-${{ github.sha }}.json"
-
-      - name: Upload Build Manifest as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ce-digital-ocean-manifest
-          path: ce-digital-ocean-manifest.json
-          retention-days: 5
-
-      - name: Create Build Summary
-        run: |
-          echo "### 🚀 Plane CE Digital Ocean Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| Droplet ID | \`${{ steps.ami_info.outputs.AMI_ID }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Droplet Name | \`${{ steps.ami_info.outputs.AMI_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Droplet Region | \`${{ steps.ami_info.outputs.REGION }}\` |" >> $GITHUB_STEP_SUMMARY
-
-  build_aws_appliance:
-    if: inputs.build_aws_appliance == true
+  build_aws_appliance_ce:
+    if: inputs.build_aws_appliance_ce == true
     needs: [build_setup, package_admin, package_web, package_space, package_live, package_backend]
     runs-on: ubuntu-22.04
     steps:
@@ -419,6 +301,7 @@ jobs:
             -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
             -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
             -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
+            -var "ami_regions=${{ env.AMI_REGIONS }}" \
             ./deploy/packer/ce-aws-ami.pkr.hcl
 
       - name: Cleanup Old AMIs

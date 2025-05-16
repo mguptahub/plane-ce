@@ -43,6 +43,11 @@ variable "base_image_owner" {
   default = "099720109477"
 }
 
+variable "ami_regions" {
+  type    = list(string)
+  default = ["us-east-1"]
+}
+
 # Local variables for reuse
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
@@ -56,8 +61,7 @@ source "amazon-ebs" "plane_aws_ami" {
   ami_name      = "${var.ami_name_prefix}-${local.timestamp}"
   instance_type = "t3a.medium"
   encrypt_boot  = false
-  ami_regions   = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
-  ami_groups    = ["all"]
+  ami_regions   = var.ami_regions
 
   launch_block_device_mappings {
     device_name           = "/dev/sda1"

@@ -1,0 +1,168 @@
+name: Appliance Build Docker
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_aws_appliance_ee:
+        description: 'Build Plane-EE AWS Appliance'
+        required: true
+        type: boolean
+        default: false
+      ami_name_prefix:
+        description: 'AMI Name Prefix'
+        required: true
+        default: 'plane-commercial'
+      aws_manifest_bucket:
+        description: 'AWS Manifest Bucket'
+        required: true
+        default: 'plane-terraform-state-dev'
+      aws_vpc_cidr:
+        description: 'AWS VPC CIDR'
+        required: true
+        default: '10.22.0.0/16'
+      aws_subnet_cidr:
+        description: 'AWS Subnet CIDR'
+        required: true
+        default: '10.22.1.0/24'
+      aws_vpc_region:
+        description: 'AWS VPC Region'
+        required: true
+        default: 'us-east-1'
+      ami_regions:
+        description: 'AMI Publish Regions (comma separated)'
+        required: true
+        default: 'us-east-1'
+
+env:
+  AMI_NAME_PREFIX: ${{ inputs.ami_name_prefix || 'plane-commercial' }}
+  
+  AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_KEY: ${{ secrets.PLANE_DEV_AWS_SECRET_ACCESS_KEY }}
+  AWS_MANIFEST_BUCKET: ${{ inputs.aws_manifest_bucket || 'plane-terraform-state-dev' }}
+
+  AWS_VPC_CIDR: ${{ inputs.aws_vpc_cidr || '10.22.0.0/16' }}
+  AWS_SUBNET_CIDR: ${{ inputs.aws_subnet_cidr || '10.22.1.0/24' }}
+  AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
+  AWS_BASE_IMAGE_OWNER: '099720109477'
+  AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
+jobs:
+
+  build_aws_appliance_ee:
+    if: inputs.build_aws_appliance_ee == true
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_VPC_REGION }}
+
+      - name: Download Previous Manifest
+        run: |
+          # Download the previous manifest from S3 if it exists
+          aws s3 cp s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json ./ee-docker-aws-ami-previous-manifest.json || true
+
+      - name: Setup `packer`
+        uses: hashicorp/setup-packer@main
+        id: setup
+        with:
+          version: latest
+
+      - name: Run `packer init`
+        id: init
+        run: "packer init ./deploy/packer/ee-docker-aws-ami.pkr.hcl"
+
+      - name: Run `packer validate`
+        id: validate
+        run: "packer validate ./deploy/packer/ee-docker-aws-ami.pkr.hcl"
+
+      - name: Run `packer build`
+        id: build
+        run: |
+          mkdir -p plane-dist
+          cp -r deploy/packer/plane-ee.sh plane-dist/
+
+          packer build \
+            -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
+            -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
+            -var "ami_name_prefix=${{ env.AMI_NAME_PREFIX }}" \
+            -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
+            -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
+            -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
+            -var "ami_regions=${{ env.AMI_REGIONS }}" \
+            ./deploy/packer/ee-docker-aws-ami.pkr.hcl
+
+      - name: Cleanup Old AMIs
+        if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
+        run: |
+          OLD_AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json | cut -d ":" -f2)
+          if [ ! -z "$OLD_AMI_ID" ]; then
+            echo "Found previous AMI: $OLD_AMI_ID"
+            # Deregister the old AMI
+            aws ec2 deregister-image --image-id "$OLD_AMI_ID" || true
+            echo "Deregistered previous AMI: $OLD_AMI_ID"
+          fi
+
+      - name: Extract AMI Information
+        id: ami_info
+        run: |
+          # Extract AMI ID and other details from manifest
+          AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-manifest.json | cut -d ":" -f2)
+          AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ee-docker-aws-ami-manifest.json)
+          REGION=$(jq -r '.builds[-1].custom_data.region' ee-docker-aws-ami-manifest.json)
+          BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ee-docker-aws-ami-manifest.json)
+          
+          # Add git information to manifest
+          jq --arg branch "${{ github.ref_name }}" \
+             --arg commit "${{ github.sha }}" \
+             --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+             '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
+             ee-docker-aws-ami-manifest.json > enhanced-ee-docker-aws-ami-manifest.json
+          mv enhanced-ee-docker-aws-ami-manifest.json ee-docker-aws-ami-manifest.json
+          
+          echo "AMI_ID=${AMI_ID}" >> $GITHUB_OUTPUT
+          echo "AMI_NAME=${AMI_NAME}" >> $GITHUB_OUTPUT
+          echo "REGION=${REGION}" >> $GITHUB_OUTPUT
+          
+          echo "✅ AMI built successfully!"
+          echo "🔹 AMI ID: ${AMI_ID}"
+          echo "🔹 AMI Name: ${AMI_NAME}"
+          echo "🔹 Region: ${REGION}"
+          echo "🔹 Build Time: ${BUILD_TIME}"
+
+      - name: Store Manifest in S3
+        run: |
+          # Store the current manifest as latest
+          aws s3 cp ee-docker-aws-ami-manifest.json s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
+          
+          # Also store a versioned copy
+          aws s3 cp ee-docker-aws-ami-manifest.json "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
+
+      - name: Upload Build Manifest as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ee-docker-aws-ami-manifest
+          path: ce-aws-ami-manifest.json
+          retention-days: 30
+
+      - name: Create Build Summary
+        run: |
+          echo "### 🚀 Plane EE Docker AWS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| AMI ID | \`${{ steps.ami_info.outputs.AMI_ID }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| AMI Name | \`${{ steps.ami_info.outputs.AMI_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | \`${{ steps.ami_info.outputs.REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Tag AMI
+        run: |
+          aws ec2 create-tags \
+            --resources ${{ steps.ami_info.outputs.AMI_ID }} \
+            --tags \
+              Key=GitBranch,Value=${{ github.ref_name }} \
+              Key=GitCommit,Value=${{ github.sha }} \
+              Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
