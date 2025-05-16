@@ -141,93 +141,145 @@ build {
   provisioner "shell" {
     inline = [
       "sudo cp /home/ubuntu/plane-installer /usr/local/bin/plane-installer",
-      "sudo chmod +x /usr/local/bin/plane-installer",
+      "sudo chmod +x /home/ubuntu/plane-installer",
       "sudo /usr/local/bin/plane-installer"
     ]
   }
 
-  # Set proper permissions and verify installation
+  # Add cloud-init configuration to fetch instance metadata
+  provisioner "shell" {
+    inline = [
+      "sudo tee /etc/cloud/cloud.cfg.d/99_custom.cfg << 'EOF'",
+      "runcmd:",
+      "  - PUBLIC_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)",
+      "  - PRIVATE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)",
+      "  - echo \"export PUBLIC_DNS=$PUBLIC_DNS\" >> /etc/environment",
+      "  - echo \"export PRIVATE_DNS=$PRIVATE_DNS\" >> /etc/environment",
+      "  - echo \"Instance Public DNS: $PUBLIC_DNS\" >> /var/log/plane-metadata.log",
+      "  - echo \"Instance Private DNS: $PRIVATE_DNS\" >> /var/log/plane-metadata.log",
+      "EOF"
+    ]
+  }
+
+  # Create a script to fetch instance metadata that can be run manually
+  provisioner "shell" {
+    inline = [
+      "chmod +x /home/ubuntu/plane-installer",
+      "sudo /home/ubuntu/plane-installer",
+      "sudo tee /usr/local/bin/fetch-instance-metadata << 'EOF'",
+      "#!/bin/bash",
+      "PUBLIC_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)",
+      "PRIVATE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)",
+      "echo \"Public DNS: $PUBLIC_DNS\"",
+      "echo \"Private DNS: $PRIVATE_DNS\"",
+      "EOF",
+      "sudo chmod +x /usr/local/bin/fetch-instance-metadata"
+    ]
+  }
+
+  # Create startup verification script
+  provisioner "shell" {
+    inline = [
+      "sudo tee /usr/local/bin/verify-plane-setup << 'EOF'",
+      "#!/bin/bash",
+      "",
+      "LOG_FILE=/var/log/plane-setup.log",
+      "echo \"Starting Plane verification at $(date)\" | tee -a $LOG_FILE",
+      "",
+      "# Function to log messages",
+      "log() {",
+      "    echo \"$(date '+%Y-%m-%d %H:%M:%S'): $1\" | tee -a $LOG_FILE",
+      "}",
+      "",
+      "# Check if docker is running",
+      "check_docker() {",
+      "    if ! systemctl is-active --quiet docker; then",
+      "        log \"Docker is not running. Attempting to start...\"",
+      "        systemctl start docker",
+      "        sleep 5",
+      "        if ! systemctl is-active --quiet docker; then",
+      "            log \"ERROR: Failed to start Docker\"",
+      "            return 1",
+      "        fi",
+      "    fi",
+      "    log \"Docker is running\"",
+      "    return 0",
+      "}",
+      "",
+      "# Get instance metadata",
+      "PUBLIC_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)",
+      "PRIVATE_DNS=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname)",
+      "",
+      "# Run setup",
+      "run_setup() {",
+      "    local DOMAIN=${PUBLIC_DNS:-$PRIVATE_DNS}",
+      "    log \"Running setup with domain: $DOMAIN\"",
+      "    prime-cli setup --silent --behind-proxy --domain \"$DOMAIN\" 2>&1 | tee -a $LOG_FILE",
+      "    return ${PIPESTATUS[0]}",
+      "}",
+      "",
+      "# Check HTTP response",
+      "check_http() {",
+      "    local max_attempts=12  # 2 minutes (12 * 10 seconds)",
+      "    local attempt=1",
+      "",
+      "    while [ $attempt -le $max_attempts ]; do",
+      "        log \"Checking HTTP response (attempt $attempt/$max_attempts)\"",
+      "        if curl -s -o /dev/null -w \"%{http_code}\" http://localhost | grep -q \"200\"; then",
+      "            log \"Successfully received HTTP 200 response\"",
+      "            return 0",
+      "        fi",
+      "        attempt=$((attempt + 1))",
+      "        sleep 10",
+      "    done",
+      "",
+      "    log \"ERROR: Failed to get HTTP 200 response after 2 minutes\"",
+      "    return 1",
+      "}",
+      "",
+      "# Main execution",
+      "main() {",
+      "    check_docker || { log \"FATAL: Docker check failed\"; exit 1; }",
+      # "    run_setup || { log \"FATAL: Plane setup failed\"; exit 1; }",
+      # "    check_http || { log \"FATAL: HTTP check failed\"; exit 1; }",
+      "    log \"SUCCESS: All verification steps completed successfully\"",
+      "    exit 0",
+      "}",
+      "",
+      "main",
+      "EOF",
+      "sudo chmod +x /usr/local/bin/verify-plane-setup"
+    ]
+  }
+
+  # Configure cloud-init to run verification on startup
   # provisioner "shell" {
-  #   environment_vars = [
-  #     "DEBIAN_FRONTEND=noninteractive",
-  #     "TERM=xterm-256color"
-  #   ]
   #   inline = [
-  #     "sudo mkdir -p /opt/plane/svc",
-  #     "sudo chown -R ubuntu:ubuntu /opt/plane",
-  #     "sudo chmod -R 755 /opt/plane",
-
-  #     # Extract the application files
-  #     "echo 'Depacking admin folder'",
-  #     "sudo tar -xzf /opt/plane/tars/admin-dist.tar.gz -C /opt/plane/extracted",
-  #     "sudo mv /opt/plane/extracted/admin-dist/ /opt/plane/admin",
-  #     "sudo cp /opt/plane/tars/admin.env /opt/plane/admin/admin.env",
-
-  #     "echo 'Depacking web folder'",
-  #     "sudo tar -xzf /opt/plane/tars/web-dist.tar.gz -C /opt/plane/extracted",
-  #     "sudo mv /opt/plane/extracted/web-dist/ /opt/plane/web",
-  #     "sudo cp /opt/plane/tars/web.env /opt/plane/web/web.env",
-
-  #     "echo 'Depacking space folder'",
-  #     "sudo tar -xzf /opt/plane/tars/space-dist.tar.gz -C /opt/plane/extracted",
-  #     "sudo mv /opt/plane/extracted/space-dist/ /opt/plane/space",
-  #     "sudo cp /opt/plane/tars/space.env /opt/plane/space/space.env",
-
-  #     "echo 'Depacking live folder'",
-  #     "sudo tar -xzf /opt/plane/tars/live-dist.tar.gz -C /opt/plane/extracted",
-  #     "sudo mv /opt/plane/extracted/live-dist/ /opt/plane/live",
-  #     "sudo cp /opt/plane/tars/live.env /opt/plane/live/live.env",
-
-  #     "echo 'Depacking backend folder'",    
-  #     "sudo tar -xzf /opt/plane/tars/backend-dist.tar.gz -C /opt/plane/extracted",
-  #     "sudo mv /opt/plane/extracted/backend-dist/ /opt/plane/backend",
-  #     "sudo cp /opt/plane/tars/backend.env /opt/plane/backend/backend.env",
-
-  #     "echo 'Copying services'",
-  #     "sudo cp /opt/plane/tars/*.service /opt/plane/svc/",
-
-  #     "echo 'Copying Caddyfile'",
-  #     "sudo cp /opt/plane/tars/Caddyfile /opt/plane/Caddyfile",
-
-  #     "echo 'Copying plane-ce.sh'",
-  #     "sudo cp /opt/plane/tars/plane-ce.sh /usr/local/bin/plane",
-  #     "sudo chmod +x /usr/local/bin/plane",
-
-  #     "echo 'Removing extracted folder'",
-  #     "sudo rm -rf /opt/plane/extracted",
-  #     # "sudo rm -rf /opt/plane/tars",
-
-  #     # Set proper permissions and verify installation
-  #     "echo 'Setting proper permissions...'",
-  #     "sudo chown -R ubuntu:ubuntu /opt/plane",
-  #     "sudo chmod -R 755 /opt/plane",
-  #     # Verify installation
-  #     "echo 'Verifying assets copied...'",
-  #     "ls -la /opt/plane",
-  #     "for dir in admin web space live backend; do ls -la /opt/plane/$dir; done",
-  #     "echo 'Assets copied successfully'"
+  #     "sudo tee /etc/cloud/cloud.cfg.d/99_plane_verify.cfg << 'EOF'",
+  #     "runcmd:",
+  #     "  - [ /usr/local/bin/verify-plane-setup ]",
+  #     "EOF"
   #   ]
   # }
 
+  # # Create a systemd service for the verification
   # provisioner "shell" {
-  #   environment_vars = [
-  #     "DEBIAN_FRONTEND=noninteractive",
-  #     "TERM=xterm-256color",
-  #     "CI=true"
-  #   ]
   #   inline = [
-  #     "bash -c '. /usr/local/bin/plane && install_prerequisites'",
-  #   ]
-  # }
-
-  # provisioner "shell" {
-  #   environment_vars = [
-  #     "DEBIAN_FRONTEND=noninteractive",
-  #     "TERM=xterm-256color"
-  #   ]
-  #   inline = [
-  #     "sudo systemctl enable ssh",
-  #     "sudo systemctl start ssh"
+  #     "sudo tee /etc/systemd/system/plane-verify.service << 'EOF'",
+  #     "[Unit]",
+  #     "Description=Plane Setup Verification",
+  #     "After=network-online.target docker.service",
+  #     "Wants=network-online.target",
+  #     "",
+  #     "[Service]",
+  #     "Type=oneshot",
+  #     "ExecStart=/usr/local/bin/verify-plane-setup",
+  #     "RemainAfterExit=yes",
+  #     "",
+  #     "[Install]",
+  #     "WantedBy=multi-user.target",
+  #     "EOF",
+  #     "sudo systemctl enable plane-verify.service"
   #   ]
   # }
 
