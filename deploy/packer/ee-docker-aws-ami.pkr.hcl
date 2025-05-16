@@ -135,11 +135,12 @@ build {
 
   provisioner "file" {
     source      = "plane-dist/plane-ee.sh"
-    destination = "/usr/local/bin/plane-installer"
+    destination = "/home/ubuntu/plane-installer"
   }
 
   provisioner "shell" {
     inline = [
+      "sudo cp /home/ubuntu/plane-installer /usr/local/bin/plane-installer",
       "sudo chmod +x /usr/local/bin/plane-installer",
       "sudo /usr/local/bin/plane-installer"
     ]
