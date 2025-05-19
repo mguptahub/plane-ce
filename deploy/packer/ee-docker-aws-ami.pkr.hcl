@@ -146,8 +146,8 @@ build {
       "sudo mv /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
       "sudo chmod +x /usr/local/bin/verify-plane-setup",
       "sudo mv /home/ubuntu/cloud-init/plane-verify.service /etc/systemd/system/plane-verify.service",
-      "sudo systemctl enable plane-verify.service",
-      "sudo systemctl start plane-verify.service"
+      # "sudo systemctl enable plane-verify.service",
+      # "sudo systemctl start plane-verify.service"
     ]
   }
 
