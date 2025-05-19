@@ -131,7 +131,8 @@ run_setup() {
         log "~/ is available"
 
         # Install Plane
-        curl -fsSL $PRIME_CLI_INSTALL_URL | sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+        HOME=/root curl -fsSL $PRIME_CLI_INSTALL_URL | sudo -E sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+
         RESULT=${PIPESTATUS[0]}
         if [ $RESULT -ne 0 ]; then
             log "FATAL: Plane setup failed"
