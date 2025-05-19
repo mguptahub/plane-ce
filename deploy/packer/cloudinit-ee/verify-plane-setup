@@ -1,4 +1,11 @@
 #!/bin/bash
+# Check if script has sudo privileges
+if [ "$EUID" -ne 0 ]; then
+    echo "This script requires sudo privileges. Running with sudo..."
+    exec sudo "$0" "$@"
+    exit $?
+fi
+
 # Final optimized solution - Flag file approach with instance metadata and MOTD notification
 
 LOG_FILE=/var/log/plane-setup.log
@@ -13,11 +20,11 @@ IMDS_PRIVATE_DNS_URL=http://169.254.169.254/latest/meta-data/local-hostname
 
 PRIME_CLI_INSTALL_URL=https://preview.prime.plane.town/install
 
-echo "Starting Plane verification at $(date)" | tee -a $LOG_FILE
+echo "Starting Plane verification at $(date)" | sudo tee -a $LOG_FILE
 
 # Function to log messages
 log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a $LOG_FILE
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | sudo tee -a $LOG_FILE
 }
 
 # Update status and metadata
@@ -26,7 +33,7 @@ update_status() {
     local details="${2:-No details available}"
     
     # Update local status file
-    echo "$status" > $SETUP_STATUS_FLAG
+    echo "$status" | sudo tee $SETUP_STATUS_FLAG > /dev/null
     
     # Update AWS instance tags if possible
     TOKEN=$(curl -s -X PUT "$IMDS_TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
@@ -49,7 +56,7 @@ update_status() {
 
 # Set up MOTD (Message of the Day)
 create_motd() {
-    cat > /etc/update-motd.d/99-plane-status <<EOF
+    sudo bash -c "cat > /etc/update-motd.d/99-plane-status" <<EOF
 #!/bin/bash
 if [ -f "$SETUP_COMPLETE_FLAG" ]; then
     echo ""
@@ -65,21 +72,21 @@ else
     echo ""
 fi
 EOF
-    chmod +x /etc/update-motd.d/99-plane-status
+    sudo chmod +x /etc/update-motd.d/99-plane-status
     
     # Run update-motd to generate /run/motd.dynamic
-    run-parts /etc/update-motd.d/ > /run/motd.dynamic 2>/dev/null || true
+    sudo run-parts /etc/update-motd.d/ > /run/motd.dynamic 2>/dev/null || true
 }
 
 # Check if docker is running
 check_docker() {
     update_status "CHECKING_DOCKER" "Verifying Docker service status"
     
-    if ! systemctl is-active --quiet docker; then
+    if ! sudo systemctl is-active --quiet docker; then
         log "Docker is not running. Attempting to start..."
-        systemctl start docker
+        sudo systemctl start docker
         sleep 5
-        if ! systemctl is-active --quiet docker; then
+        if ! sudo systemctl is-active --quiet docker; then
             log "ERROR: Failed to start Docker"
             update_status "FAILED" "Docker check failed"
             return 1
@@ -94,7 +101,7 @@ get_metadata() {
     update_status "GETTING_METADATA" "Retrieving instance metadata"
     
     # Try IMDSv2 first
-    TOKEN=$(curl -s -X PUT "$TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    TOKEN=$(curl -s -X PUT "$IMDS_TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
     
     if [ -n "$TOKEN" ]; then
         PUBLIC_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL || echo "")
@@ -174,7 +181,7 @@ main() {
     check_http || log "WARNING: HTTP check failed but continuing"
     
     # Mark as complete
-    echo "Setup completed at $(date)" > $SETUP_COMPLETE_FLAG
+    echo "Setup completed at $(date)" | sudo tee $SETUP_COMPLETE_FLAG > /dev/null
     update_status "COMPLETE" "Plane setup completed successfully"
     create_motd  # Update MOTD with completion status
     
