@@ -5,8 +5,14 @@ LOG_FILE=/var/log/plane-setup.log
 SETUP_COMPLETE_FLAG=/var/lib/cloud/instance/plane-setup-complete
 SETUP_STATUS_FLAG=/var/lib/cloud/instance/plane-setup-status
 
-PUBLIC_DNS_URL=http://169.254.169.254/latest/meta-data/public-hostname
-PRIVATE_DNS_URL=http://169.254.169.254/latest/meta-data/local-hostname
+IMDS_TOKEN_URL=http://169.254.169.254/latest/api/token
+IMDS_INSTANCE_ID_URL=http://169.254.169.254/latest/meta-data/instance-id
+IMDS_AVAILABILITY_ZONE_URL=http://169.254.169.254/latest/meta-data/placement/availability-zone
+IMDS_PUBLIC_DNS_URL=http://169.254.169.254/latest/meta-data/public-hostname
+IMDS_PRIVATE_DNS_URL=http://169.254.169.254/latest/meta-data/local-hostname
+
+PRIME_CLI_INSTALL_URL=https://preview.prime.plane.town/install
+
 echo "Starting Plane verification at $(date)" | tee -a $LOG_FILE
 
 # Function to log messages
@@ -23,11 +29,11 @@ update_status() {
     echo "$status" > $SETUP_STATUS_FLAG
     
     # Update AWS instance tags if possible
-    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    TOKEN=$(curl -s -X PUT "$IMDS_TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
     
     if [ -n "$TOKEN" ]; then
-        INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "")
-        AVAILABILITY_ZONE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone 2>/dev/null || echo "")
+        INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_INSTANCE_ID_URL 2>/dev/null || echo "")
+        AVAILABILITY_ZONE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_AVAILABILITY_ZONE_URL 2>/dev/null || echo "")
         REGION=${AVAILABILITY_ZONE%?}
         
         if [ -n "$INSTANCE_ID" ] && [ -n "$REGION" ] && command -v aws &>/dev/null; then
@@ -88,15 +94,15 @@ get_metadata() {
     update_status "GETTING_METADATA" "Retrieving instance metadata"
     
     # Try IMDSv2 first
-    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    TOKEN=$(curl -s -X PUT "$TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
     
     if [ -n "$TOKEN" ]; then
-        PUBLIC_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $PUBLIC_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $PUBLIC_DNS_URL || echo "")
-        PRIVATE_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $PRIVATE_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $PRIVATE_DNS_URL || echo "")
+        PUBLIC_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL || echo "")
+        PRIVATE_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PRIVATE_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PRIVATE_DNS_URL || echo "")
     else
         # Fall back to IMDSv1
-        PUBLIC_DNS=$(curl -s $PUBLIC_DNS_URL 2>/dev/null || echo "")
-        PRIVATE_DNS=$(curl -s $PRIVATE_DNS_URL 2>/dev/null || echo "")
+        PUBLIC_DNS=$(curl -s $IMDS_PUBLIC_DNS_URL 2>/dev/null || echo "")    
+        PRIVATE_DNS=$(curl -s $IMDS_PRIVATE_DNS_URL 2>/dev/null || echo "")
     fi
     
     log "Metadata obtained - Public: $PUBLIC_DNS, Private: $PRIVATE_DNS"
@@ -109,7 +115,7 @@ run_setup() {
     update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"
     
     if [ ! -f /opt/plane/.config.env ]; then
-        curl -fsSL https://preview.prime.plane.town/install | sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+        curl -fsSL $PRIME_CLI_INSTALL_URL | sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
         RESULT=${PIPESTATUS[0]}
         if [ $RESULT -ne 0 ]; then
             log "FATAL: Plane setup failed"
@@ -124,7 +130,7 @@ run_setup() {
 
 # Check HTTP response
 check_http() {
-    local max_attempts=18  # 3 minutes (18 * 10 seconds)
+    local max_attempts=12  # 2 minutes (12 * 10 seconds)
     local attempt=1
     update_status "VERIFYING" "Checking if Plane is responding"
     
