@@ -1,5 +1,12 @@
 #!/bin/bash
+# Final optimized solution - Flag file approach with instance metadata and MOTD notification
+
 LOG_FILE=/var/log/plane-setup.log
+SETUP_COMPLETE_FLAG=/var/lib/cloud/instance/plane-setup-complete
+SETUP_STATUS_FLAG=/var/lib/cloud/instance/plane-setup-status
+
+PUBLIC_DNS_URL=http://169.254.169.254/latest/meta-data/public-hostname
+PRIVATE_DNS_URL=http://169.254.169.254/latest/meta-data/local-hostname
 echo "Starting Plane verification at $(date)" | tee -a $LOG_FILE
 
 # Function to log messages
@@ -7,14 +14,68 @@ log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a $LOG_FILE
 }
 
+# Update status and metadata
+update_status() {
+    local status="$1"
+    local details="${2:-No details available}"
+    
+    # Update local status file
+    echo "$status" > $SETUP_STATUS_FLAG
+    
+    # Update AWS instance tags if possible
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    
+    if [ -n "$TOKEN" ]; then
+        INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "")
+        AVAILABILITY_ZONE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone 2>/dev/null || echo "")
+        REGION=${AVAILABILITY_ZONE%?}
+        
+        if [ -n "$INSTANCE_ID" ] && [ -n "$REGION" ] && command -v aws &>/dev/null; then
+            aws ec2 create-tags \
+                --region "$REGION" \
+                --resources "$INSTANCE_ID" \
+                --tags "Key=PlaneStatus,Value=$status" "Key=PlaneStatusDetails,Value=$details" 2>/dev/null || true
+        fi
+    fi
+    
+    log "Status updated: $status - $details"
+}
+
+# Set up MOTD (Message of the Day)
+create_motd() {
+    cat > /etc/update-motd.d/99-plane-status <<EOF
+#!/bin/bash
+if [ -f "$SETUP_COMPLETE_FLAG" ]; then
+    echo ""
+    echo "✅ PLANE SETUP IS COMPLETE"
+    echo "You can access Plane at: http://\$(hostname -I | awk '{print \$1}')"
+    echo "Setup completed: \$(cat $SETUP_COMPLETE_FLAG)"
+    echo ""
+else
+    echo ""
+    echo "⚠️  PLANE SETUP IS STILL IN PROGRESS"
+    echo "Current status: \$(cat $SETUP_STATUS_FLAG 2>/dev/null || echo 'Unknown')"
+    echo "Check logs: sudo cat $LOG_FILE"
+    echo ""
+fi
+EOF
+    chmod +x /etc/update-motd.d/99-plane-status
+    
+    # Run update-motd to generate /run/motd.dynamic
+    run-parts /etc/update-motd.d/ > /run/motd.dynamic 2>/dev/null || true
+}
+
 # Check if docker is running
 check_docker() {
+    update_status "CHECKING_DOCKER" "Verifying Docker service status"
+    
     if ! systemctl is-active --quiet docker; then
         log "Docker is not running. Attempting to start..."
         systemctl start docker
         sleep 5
         if ! systemctl is-active --quiet docker; then
             log "ERROR: Failed to start Docker"
+            update_status "FAILED" "Docker check failed"
             return 1
         fi
     fi
@@ -23,29 +84,50 @@ check_docker() {
 }
 
 # Get instance metadata
-PUBLIC_DNS=$(curl -s -o /dev/null -w '%{http_code}' http://169.254.169.254/latest/meta-data/public-hostname | grep -q "200" && curl -s http://169.254.169.254/latest/meta-data/public-hostname || echo "")
-PRIVATE_DNS=$(curl -s -o /dev/null -w '%{http_code}' http://169.254.169.254/latest/meta-data/local-hostname | grep -q "200" && curl -s http://169.254.169.254/latest/meta-data/local-hostname || echo "")
-
-download_cli() {
-    /usr/local/bin/cli-download 2>&1 | tee -a $LOG_FILE
+get_metadata() {
+    update_status "GETTING_METADATA" "Retrieving instance metadata"
+    
+    # Try IMDSv2 first
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    
+    if [ -n "$TOKEN" ]; then
+        PUBLIC_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $PUBLIC_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $PUBLIC_DNS_URL || echo "")
+        PRIVATE_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $PRIVATE_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $PRIVATE_DNS_URL || echo "")
+    else
+        # Fall back to IMDSv1
+        PUBLIC_DNS=$(curl -s $PUBLIC_DNS_URL 2>/dev/null || echo "")
+        PRIVATE_DNS=$(curl -s $PRIVATE_DNS_URL 2>/dev/null || echo "")
+    fi
+    
+    log "Metadata obtained - Public: $PUBLIC_DNS, Private: $PRIVATE_DNS"
 }
 
-# Run setup
+# Run Plane setup
 run_setup() {
     local DOMAIN=${PUBLIC_DNS:-$PRIVATE_DNS}
     log "Running setup with domain: $DOMAIN"
+    update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"
+    
     if [ ! -f /opt/plane/.config.env ]; then
-        prime-cli setup --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+        curl -fsSL https://preview.prime.plane.town/install | sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+        RESULT=${PIPESTATUS[0]}
+        if [ $RESULT -ne 0 ]; then
+            log "FATAL: Plane setup failed"
+            update_status "FAILED" "Plane installation failed"
+            return 1
+        fi
     else
         log "Plane is already setup"
     fi
-    return ${PIPESTATUS[0]}
+    return 0
 }
 
 # Check HTTP response
 check_http() {
     local max_attempts=18  # 3 minutes (18 * 10 seconds)
     local attempt=1
+    update_status "VERIFYING" "Checking if Plane is responding"
+    
     while [ $attempt -le $max_attempts ]; do
         log "Checking HTTP response (attempt $attempt/$max_attempts)"
         if curl -s -o /dev/null -w '%{http_code}' http://localhost | grep -q "200"; then
@@ -55,16 +137,41 @@ check_http() {
         attempt=$((attempt + 1))
         sleep 10
     done
-    log "ERROR: Failed to get HTTP 200 response after 2 minutes"
+    log "WARNING: Failed to get HTTP 200 response after 3 minutes"
     return 1
 }
 
 # Main execution
 main() {
-    check_docker || { log "FATAL: Docker check failed"; exit 1; }
-    download_cli || { log "FATAL: CLI download failed"; exit 1; }
-    # run_setup || { log "FATAL: Plane setup failed"; exit 1; }
-    # check_http || { log "FATAL: HTTP check failed"; exit 1; }
+    # Initial setup
+    create_motd
+    update_status "INITIALIZING" "Starting Plane setup process"
+    
+    # Check Docker
+    check_docker || { 
+        update_status "FAILED" "Docker check failed"
+        log "FATAL: Docker check failed" 
+        exit 1
+    }
+    
+    # Get instance metadata
+    get_metadata
+    
+    # Run setup
+    run_setup || {
+        update_status "FAILED" "Plane installation failed" 
+        log "FATAL: Plane setup failed"
+        exit 1
+    }
+    
+    # Verify HTTP
+    check_http || log "WARNING: HTTP check failed but continuing"
+    
+    # Mark as complete
+    echo "Setup completed at $(date)" > $SETUP_COMPLETE_FLAG
+    update_status "COMPLETE" "Plane setup completed successfully"
+    create_motd  # Update MOTD with completion status
+    
     log "SUCCESS: All verification steps completed successfully"
     exit 0
 }

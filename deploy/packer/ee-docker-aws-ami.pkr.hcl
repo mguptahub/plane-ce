@@ -142,8 +142,6 @@ build {
 
   provisioner "shell" {
     inline = [
-      "sudo mv /home/ubuntu/cloud-init/cli-download /usr/local/bin/cli-download",
-      "sudo chmod +x /usr/local/bin/cli-download",
       "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
       "sudo mv /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
       "sudo chmod +x /usr/local/bin/verify-plane-setup",
