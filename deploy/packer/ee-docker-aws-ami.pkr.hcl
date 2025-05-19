@@ -126,7 +126,7 @@ build {
     ]
     inline = [
       "sudo apt-get update",
-      "sudo apt-get install -y cloud-init net-tools",
+      "sudo apt-get install -y cloud-init",
       "curl -fsSL https://get.docker.com | sudo sh -",
       "sudo apt-get install -y uidmap",
       "sudo usermod -aG docker ubuntu",
