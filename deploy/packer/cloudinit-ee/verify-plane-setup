@@ -18,7 +18,11 @@ IMDS_AVAILABILITY_ZONE_URL=http://169.254.169.254/latest/meta-data/placement/ava
 IMDS_PUBLIC_DNS_URL=http://169.254.169.254/latest/meta-data/public-hostname
 IMDS_PRIVATE_DNS_URL=http://169.254.169.254/latest/meta-data/local-hostname
 
-PRIME_CLI_INSTALL_URL=https://preview.prime.plane.town/install
+PRIME_HOST=https://preview.prime.plane.town
+PRIME_CLI_DOWNLOAD_URL="${PRIME_HOST}/api/v2/downloads/cli"
+
+OS_NAME=$(uname)
+CPU_ARCH=$(uname -m)
 
 echo "Starting Plane verification at $(date)" | sudo tee -a $LOG_FILE
 
@@ -116,11 +120,66 @@ get_metadata() {
 }
 
 # Run Plane setup
+get_machine_id() {
+  if [ -f /etc/machine-id ]; then
+    cat /etc/machine-id
+  elif [ -f /var/lib/dbus/machine-id ]; then
+    cat /var/lib/dbus/machine-id
+  else
+    echo ""
+  fi
+}
+
+download_cli() {
+    MACHINE_ID=$(get_machine_id)
+
+    if [ "${OS_NAME}" != "Linux" ] && [ "${OS_NAME}" != "Darwin" ]; then
+        echo "Plane One only works with some flavors of Linux. See https://docs.plane.so/plane-one/self-host/overview"
+        exit 1
+    fi
+
+    if [ -z "${MACHINE_ID}" ]; then
+        echo "❌ Machine ID not found ❌"
+        exit 1
+    fi
+
+    CLI_DOWNLOAD_RESPONSE=$(curl -sL -H "x-machine-signature: ${MACHINE_ID}" "$PRIME_CLI_DOWNLOAD_URL?arch=${CPU_ARCH}&os=${OS_NAME}" -o /tmp/prime-cli.tar.gz -w "%{http_code}" )
+    if [ $CLI_DOWNLOAD_RESPONSE -eq 200 ]; then
+        # Extract the tar.gz file to /bin
+        if ! sudo tar -xzf /tmp/prime-cli.tar.gz -C /bin; then
+            echo "Installation failed. Run the curl command again."
+            rm -f /tmp/prime-cli.tar.gz
+            exit 1
+        fi
+        rm -f /tmp/prime-cli.tar.gz
+    elif [ $CLI_DOWNLOAD_RESPONSE -eq "000" ]; then
+        echo "Prime CLI download failed. Run the curl command again."
+        echo "Error: $CLI_DOWNLOAD_RESPONSE"
+        exit 1
+    elif [ $CLI_DOWNLOAD_RESPONSE -ge 400 ] && [ $CLI_DOWNLOAD_RESPONSE -lt 500 ]; then
+        echo "Prime CLI download failed. Run the curl command again."
+        echo "Error: $CLI_DOWNLOAD_RESPONSE"
+        exit 1
+    elif [ $CLI_DOWNLOAD_RESPONSE -ge 500 ] && [ $CLI_DOWNLOAD_RESPONSE -lt 600 ]; then
+        echo "Prime CLI download failed. Run the curl command again."
+        echo "Error: $CLI_DOWNLOAD_RESPONSE"
+        exit 1
+    else
+        echo "Prime CLI download failed. Run the curl command again."
+        echo "Error: $CLI_DOWNLOAD_RESPONSE"
+        exit 1
+    fi
+
+
+    log "Downloading Plane CLI"
+    HOME=/root curl -fsSL $PRIME_CLI_INSTALL_URL | sudo -E sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+}
+
 run_setup() {
     local DOMAIN=${PUBLIC_DNS:-$PRIVATE_DNS}
     log "Running setup with domain: $DOMAIN"
     update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"
-    
+
     if [ ! -f /opt/plane/.config.env ]; then
         # Wait for ~/ to be created
         log "Checking for ~/"
@@ -130,8 +189,9 @@ run_setup() {
         done
         log "~/ is available"
 
+        download_cli
         # Install Plane
-        HOME=/root curl -fsSL $PRIME_CLI_INSTALL_URL | sudo -E sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+        sudo prime-cli setup --host="$PRIME_HOST" --silent --behind-proxy --domain="$DOMAIN" 2>&1 | tee -a $LOG_FILE
 
         RESULT=${PIPESTATUS[0]}
         if [ $RESULT -ne 0 ]; then
