@@ -16,7 +16,8 @@ IMDS_TOKEN_URL=http://169.254.169.254/latest/api/token
 IMDS_INSTANCE_ID_URL=http://169.254.169.254/latest/meta-data/instance-id
 IMDS_AVAILABILITY_ZONE_URL=http://169.254.169.254/latest/meta-data/placement/availability-zone
 IMDS_PUBLIC_DNS_URL=http://169.254.169.254/latest/meta-data/public-hostname
-IMDS_PRIVATE_DNS_URL=http://169.254.169.254/latest/meta-data/local-hostname
+IMDS_PUBLIC_IP_URL=http://169.254.169.254/latest/meta-data/public-ipv4
+IMDS_PRIVATE_IP_URL=http://169.254.169.254/latest/meta-data/local-ipv4
 
 PRIME_HOST=https://preview.prime.plane.town
 PRIME_CLI_DOWNLOAD_URL="${PRIME_HOST}/api/v2/downloads/cli"
@@ -108,15 +109,38 @@ get_metadata() {
     TOKEN=$(curl -s -X PUT "$IMDS_TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
     
     if [ -n "$TOKEN" ]; then
-        PUBLIC_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL || echo "")
-        PRIVATE_DNS=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PRIVATE_DNS_URL | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PRIVATE_DNS_URL || echo "")
+        # Try public DNS first
+        PUBLIC_DNS=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL 2>/dev/null || echo "")
+        
+        if [ -n "$PUBLIC_DNS" ]; then
+            INSTANCE_ADDRESS=$PUBLIC_DNS
+        else
+            # Try public IP next
+            PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_IP_URL 2>/dev/null || echo "")
+            if [ -n "$PUBLIC_IP" ]; then
+                INSTANCE_ADDRESS=$PUBLIC_IP
+            else
+                # Fall back to private IP
+                INSTANCE_ADDRESS=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PRIVATE_IP_URL 2>/dev/null || echo "")
+            fi
+        fi
     else
-        # Fall back to IMDSv1
-        PUBLIC_DNS=$(curl -s $IMDS_PUBLIC_DNS_URL 2>/dev/null || echo "")    
-        PRIVATE_DNS=$(curl -s $IMDS_PRIVATE_DNS_URL 2>/dev/null || echo "")
+        # Fall back to IMDSv1 with the same logic
+        PUBLIC_DNS=$(curl -s $IMDS_PUBLIC_DNS_URL 2>/dev/null || echo "")
+        
+        if [ -n "$PUBLIC_DNS" ]; then
+            INSTANCE_ADDRESS=$PUBLIC_DNS
+        else
+            PUBLIC_IP=$(curl -s $IMDS_PUBLIC_IP_URL 2>/dev/null || echo "")
+            if [ -n "$PUBLIC_IP" ]; then
+                INSTANCE_ADDRESS=$PUBLIC_IP
+            else
+                INSTANCE_ADDRESS=$(curl -s $IMDS_PRIVATE_IP_URL 2>/dev/null || echo "")
+            fi
+        fi
     fi
     
-    log "Metadata obtained - Public: $PUBLIC_DNS, Private: $PRIVATE_DNS"
+    log "Metadata obtained - Instance address: $INSTANCE_ADDRESS"
 }
 
 # Run Plane setup
@@ -176,7 +200,7 @@ download_cli() {
 }
 
 run_setup() {
-    local DOMAIN=${PUBLIC_DNS:-$PRIVATE_DNS}
+    local DOMAIN=${INSTANCE_ADDRESS:-127.0.0.1}
     log "Running setup with domain: $DOMAIN"
     update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"
 
