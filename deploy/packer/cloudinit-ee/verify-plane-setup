@@ -207,10 +207,6 @@ download_cli() {
         echo "Error: $CLI_DOWNLOAD_RESPONSE"
         exit 1
     fi
-
-
-    # log "Downloading Plane CLI"
-    sudo /usr/bin/prime-cli setup --host="$PRIME_HOST" --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
 }
 
 run_setup() {
