@@ -24,6 +24,10 @@ on:
         description: 'AWS VPC Region'
         required: true
         default: 'us-east-1'
+      prime_host:
+        description: 'Prime Host'
+        required: true
+        default: 'https://prime.plane.so'
       # ami_regions:
       #   description: 'AMI Publish Regions (comma separated)'
       #   required: true
@@ -38,6 +42,7 @@ env:
   AWS_SUBNET_CIDR: ${{ inputs.aws_subnet_cidr || '10.22.1.0/24' }}
   AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
   AWS_BASE_IMAGE_OWNER: '099720109477'
+  PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
   # AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
 jobs:
 
@@ -88,6 +93,7 @@ jobs:
             -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
             -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
             -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
+            -var "prime_host=${{ env.PRIME_HOST }}" \
             ./deploy/packer/ee-docker-aws-ami.pkr.hcl
 
       - name: Cleanup Old AMIs

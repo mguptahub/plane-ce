@@ -19,7 +19,7 @@ IMDS_PUBLIC_DNS_URL=http://169.254.169.254/latest/meta-data/public-hostname
 IMDS_PUBLIC_IP_URL=http://169.254.169.254/latest/meta-data/public-ipv4
 IMDS_PRIVATE_IP_URL=http://169.254.169.254/latest/meta-data/local-ipv4
 
-PRIME_HOST=https://preview.prime.plane.town
+PRIME_HOST=${PRIME_HOST:-https://prime.plane.so}
 PRIME_CLI_DOWNLOAD_URL="${PRIME_HOST}/api/v2/downloads/cli"
 
 OS_NAME=$(uname)

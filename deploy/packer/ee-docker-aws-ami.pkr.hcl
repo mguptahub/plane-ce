@@ -48,6 +48,11 @@ variable "ami_regions" {
   default = ["us-east-1"]
 }
 
+variable "prime_host" {
+  type    = string
+  default = "https://prime.plane.so"
+}
+
 # Local variables for reuse
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
@@ -135,19 +140,31 @@ build {
     ]
   }
 
+  # set prime host to instance environment variable
+  provisioner "shell" {
+    inline = [
+      "echo 'PRIME_HOST=${var.prime_host}' >> /etc/environment"
+    ]
+  }
+
   provisioner "file" {
     source      = "plane-dist/"
     destination = "/home/ubuntu/cloud-init"
   }
 
   provisioner "shell" {
+    environment_vars = [
+      "DEBIAN_FRONTEND=noninteractive",
+      "TERM=xterm-256color",
+      "PRIME_HOST=${var.prime_host}"
+    ]
     inline = [
       "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
       "sudo mv /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
       "sudo chmod +x /usr/local/bin/verify-plane-setup",
       "sudo mv /home/ubuntu/cloud-init/plane-verify.service /etc/systemd/system/plane-verify.service",
       "sudo /usr/local/bin/verify-plane-setup",
-      "sudo rm /opt/plane/.config.env"
+      "sudo prime-cli uninstall"
       # "sudo systemctl enable plane-verify.service",
       # "sudo systemctl start plane-verify.service"
     ]
