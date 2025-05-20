@@ -143,7 +143,7 @@ build {
   # set prime host to instance environment variable
   provisioner "shell" {
     inline = [
-      "echo 'PRIME_HOST=${var.prime_host}' >> /etc/environment"
+      "sudo bash -c 'echo PRIME_HOST=${var.prime_host} >> /etc/environment'"
     ]
   }
 
