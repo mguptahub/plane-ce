@@ -6,6 +6,22 @@ if [ "$EUID" -ne 0 ]; then
     exit $?
 fi
 
+# loop through all arguments
+for arg in "$@"; do
+    case $arg in
+        --prime-host)
+            PRIME_HOST=$2
+            shift
+            ;;
+        --prime-host=*)
+            PRIME_HOST="${arg#*=}"
+            shift
+            ;;
+        *)
+            ;;
+    esac
+done
+
 # Final optimized solution - Flag file approach with instance metadata and MOTD notification
 
 LOG_FILE=/var/log/plane-setup.log
@@ -20,6 +36,7 @@ IMDS_PUBLIC_IP_URL=http://169.254.169.254/latest/meta-data/public-ipv4
 IMDS_PRIVATE_IP_URL=http://169.254.169.254/latest/meta-data/local-ipv4
 
 PRIME_HOST=${PRIME_HOST:-https://prime.plane.so}
+
 PRIME_CLI_DOWNLOAD_URL="${PRIME_HOST}/api/v2/downloads/cli"
 
 OS_NAME=$(uname)
@@ -101,42 +118,39 @@ check_docker() {
     return 0
 }
 
+get_metadata_token(){
+    TOKEN=$(curl -s -X PUT "$IMDS_TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    echo $TOKEN
+}
+get_metadata_v2() {
+    url=$1
+    TOKEN=$(get_metadata_token)
+    
+    if [ -n "$TOKEN" ]; then
+        response_value=$(curl -s -o /dev/null -w '%{http_code}' -H "X-aws-ec2-metadata-token: $TOKEN" $url | grep -q "200" && curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $url || echo "")
+    else
+        response_value=$(curl -s -o /dev/null -w '%{http_code}' $url | grep -q "200" && curl -s $url || echo "")
+    fi
+    echo $response_value
+}
+
 # Get instance metadata
 get_metadata() {
     update_status "GETTING_METADATA" "Retrieving instance metadata"
     
-    # Try IMDSv2 first
-    TOKEN=$(curl -s -X PUT "$IMDS_TOKEN_URL" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || echo "")
+    # Try public DNS first
+    PUBLIC_DNS=$(get_metadata_v2 $IMDS_PUBLIC_DNS_URL)
     
-    if [ -n "$TOKEN" ]; then
-        # Try public DNS first
-        PUBLIC_DNS=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_DNS_URL 2>/dev/null || echo "")
-        
-        if [ -n "$PUBLIC_DNS" ]; then
-            INSTANCE_ADDRESS=$PUBLIC_DNS
-        else
-            # Try public IP next
-            PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PUBLIC_IP_URL 2>/dev/null || echo "")
-            if [ -n "$PUBLIC_IP" ]; then
-                INSTANCE_ADDRESS=$PUBLIC_IP
-            else
-                # Fall back to private IP
-                INSTANCE_ADDRESS=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" $IMDS_PRIVATE_IP_URL 2>/dev/null || echo "")
-            fi
-        fi
+    if [ -n "$PUBLIC_DNS" ]; then
+        INSTANCE_ADDRESS=$PUBLIC_DNS
     else
-        # Fall back to IMDSv1 with the same logic
-        PUBLIC_DNS=$(curl -s $IMDS_PUBLIC_DNS_URL 2>/dev/null || echo "")
-        
-        if [ -n "$PUBLIC_DNS" ]; then
-            INSTANCE_ADDRESS=$PUBLIC_DNS
+        # Try public IP next
+        PUBLIC_IP=$(get_metadata_v2 $IMDS_PUBLIC_IP_URL)
+        if [ -n "$PUBLIC_IP" ]; then
+            INSTANCE_ADDRESS=$PUBLIC_IP
         else
-            PUBLIC_IP=$(curl -s $IMDS_PUBLIC_IP_URL 2>/dev/null || echo "")
-            if [ -n "$PUBLIC_IP" ]; then
-                INSTANCE_ADDRESS=$PUBLIC_IP
-            else
-                INSTANCE_ADDRESS=$(curl -s $IMDS_PRIVATE_IP_URL 2>/dev/null || echo "")
-            fi
+            # Fall back to private IP
+            INSTANCE_ADDRESS=$(get_metadata_v2 $IMDS_PRIVATE_IP_URL)
         fi
     fi
     
@@ -195,8 +209,8 @@ download_cli() {
     fi
 
 
-    log "Downloading Plane CLI"
-    HOME=/root curl -fsSL $PRIME_CLI_INSTALL_URL | sudo -E sh -s -- --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
+    # log "Downloading Plane CLI"
+    sudo /usr/bin/prime-cli setup --host="$PRIME_HOST" --silent --behind-proxy --domain "$DOMAIN" 2>&1 | tee -a $LOG_FILE
 }
 
 run_setup() {
