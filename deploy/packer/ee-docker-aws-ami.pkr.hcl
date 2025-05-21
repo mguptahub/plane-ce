@@ -164,7 +164,7 @@ build {
       "sudo chmod +x /usr/local/bin/verify-plane-setup",
       "sudo mv /home/ubuntu/cloud-init/plane-verify.service /etc/systemd/system/plane-verify.service",
       "sudo /usr/local/bin/verify-plane-setup --prime-host=${var.prime_host}",
-      "sudo prime-cli uninstall"
+      "sudo prime-cli uninstall -s"
       # "sudo systemctl enable plane-verify.service",
       # "sudo systemctl start plane-verify.service"
     ]
