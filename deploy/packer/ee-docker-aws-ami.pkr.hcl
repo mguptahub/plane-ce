@@ -156,14 +156,33 @@ build {
     environment_vars = [
       "DEBIAN_FRONTEND=noninteractive",
       "TERM=xterm-256color",
-      "PRIME_HOST=${var.prime_host}"
     ]
     inline = [
       "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
       "sudo mv /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
       "sudo chmod +x /usr/local/bin/verify-plane-setup",
       "sudo mv /home/ubuntu/cloud-init/plane-verify.service /etc/systemd/system/plane-verify.service",
+    ]
+  }
+
+  provisioner "shell" {
+    environment_vars = [
+      "DEBIAN_FRONTEND=noninteractive",
+      "TERM=xterm-256color",
+      "PRIME_HOST=${var.prime_host}"
+    ]
+    inline = [
       "sudo /usr/local/bin/verify-plane-setup --prime-host=${var.prime_host}",
+    ]
+    timeout = "30m"
+  }
+
+  provisioner "shell" {
+    environment_vars = [
+      "DEBIAN_FRONTEND=noninteractive",
+      "TERM=xterm-256color",
+    ]
+    inline = [
       "sudo prime-cli uninstall -s",
       "sudo rm /etc/update-motd.d/99-plane-status",
       "sudo rm /var/lib/cloud/instance/plane-setup-complete",
