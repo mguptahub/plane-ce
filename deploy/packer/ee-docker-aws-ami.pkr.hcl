@@ -130,7 +130,9 @@ build {
       "TERM=xterm-256color"
     ]
     inline = [
-      "sudo apt-get update",
+      "sudo rm -rf /var/lib/apt/lists/*",
+      "sudo mkdir -p /var/lib/apt/lists/partial",
+      "for i in {1..3}; do sudo apt-get update && break || sleep 10; done",
       "sudo apt-get install -y cloud-init",
       "curl -fsSL https://get.docker.com | sudo sh -",
       "sudo apt-get install -y uidmap",
@@ -138,6 +140,7 @@ build {
       "dockerd-rootless-setuptool.sh install",
       "mkdir -p /home/ubuntu/cloud-init",
     ]
+    timeout = "30m"
   }
 
   # set prime host to instance environment variable
