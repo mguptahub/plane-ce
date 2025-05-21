@@ -53,6 +53,11 @@ variable "prime_host" {
   default = "https://prime.plane.so"
 }
 
+variable "instance_type" {
+  type    = string
+  default = "t3a.xlarge"
+}
+
 # Local variables for reuse
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
@@ -64,7 +69,7 @@ source "amazon-ebs" "plane_aws_ami" {
   secret_key    = var.aws_secret_key
   region        = var.aws_region
   ami_name      = "${var.ami_name_prefix}-${local.timestamp}"
-  instance_type = "t3a.medium"
+  instance_type = var.instance_type
   encrypt_boot  = false
   ami_regions   = var.ami_regions
 
