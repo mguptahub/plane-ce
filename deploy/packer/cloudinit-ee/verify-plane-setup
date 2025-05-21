@@ -37,7 +37,6 @@ IMDS_PUBLIC_IP_URL=http://169.254.169.254/latest/meta-data/public-ipv4
 IMDS_PRIVATE_IP_URL=http://169.254.169.254/latest/meta-data/local-ipv4
 
 PRIME_HOST=${PRIME_HOST:-https://prime.plane.so}
-
 PRIME_CLI_DOWNLOAD_URL="${PRIME_HOST}/api/v2/downloads/cli"
 
 OS_NAME=$(uname)
@@ -165,12 +164,16 @@ get_machine_id() {
   elif [ -f /var/lib/dbus/machine-id ]; then
     cat /var/lib/dbus/machine-id
   else
-    echo ""
+    # generate a random machine id
+    echo $(uuidgen)
   fi
 }
 
 download_cli() {
     MACHINE_ID=$(get_machine_id)
+    log "Machine ID: ${MACHINE_ID}"
+    log "OS: ${OS_NAME}"
+    log "CPU Arch: ${CPU_ARCH}"
 
     if [ "${OS_NAME}" != "Linux" ] && [ "${OS_NAME}" != "Darwin" ]; then
         echo "Plane One only works with some flavors of Linux. See https://docs.plane.so/plane-one/self-host/overview"
@@ -183,6 +186,12 @@ download_cli() {
     fi
 
     CLI_DOWNLOAD_RESPONSE=$(curl -sL -H "x-machine-signature: ${MACHINE_ID}" "$PRIME_CLI_DOWNLOAD_URL?arch=${CPU_ARCH}&os=${OS_NAME}" -o /tmp/prime-cli.tar.gz -w "%{http_code}" )
+    if [ $? -ne 0 ]; then
+        echo "❌ Prime CLI download failed ❌"
+        log "❌ Prime CLI download failed ❌"
+        update_status "FAILED" "Prime CLI download failed"
+        exit 1
+    fi
     if [ $CLI_DOWNLOAD_RESPONSE -eq 200 ]; then
         # Extract the tar.gz file to /bin
         if ! sudo tar -xzf /tmp/prime-cli.tar.gz -C /bin; then
@@ -213,6 +222,7 @@ download_cli() {
 run_setup() {
     local DOMAIN=${INSTANCE_ADDRESS:-127.0.0.1}
     log "Running setup with domain: $DOMAIN"
+    log "Prime Host: $PRIME_HOST"
     update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"
 
     if [ ! -f /opt/plane/.config.env ]; then
