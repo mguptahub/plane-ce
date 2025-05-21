@@ -24,6 +24,10 @@ on:
         description: 'AWS VPC Region'
         required: true
         default: 'us-east-1'
+      ami_prefix:
+        description: 'AMI Prefix'
+        required: true
+        default: 'plane-commercial'
       prime_host:
         description: 'Prime Host'
         required: true
@@ -43,6 +47,7 @@ env:
   AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
   AWS_BASE_IMAGE_OWNER: '099720109477'
   PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
+  AMI_PREFIX: ${{ inputs.ami_prefix || 'plane-commercial' }}
   # AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
 jobs:
 
@@ -89,7 +94,7 @@ jobs:
           packer build \
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
-            -var "ami_name_prefix=plane-commercial" \
+            -var "ami_name_prefix=${{ env.AMI_PREFIX }}" \
             -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
             -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
             -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
