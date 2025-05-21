@@ -27,6 +27,7 @@ done
 LOG_FILE=/var/log/plane-setup.log
 SETUP_COMPLETE_FLAG=/var/lib/cloud/instance/plane-setup-complete
 SETUP_STATUS_FLAG=/var/lib/cloud/instance/plane-setup-status
+MOTD_FILE=/etc/update-motd.d/99-plane-status
 
 IMDS_TOKEN_URL=http://169.254.169.254/latest/api/token
 IMDS_INSTANCE_ID_URL=http://169.254.169.254/latest/meta-data/instance-id
@@ -78,7 +79,7 @@ update_status() {
 
 # Set up MOTD (Message of the Day)
 create_motd() {
-    sudo bash -c "cat > /etc/update-motd.d/99-plane-status" <<EOF
+    sudo bash -c "cat > $MOTD_FILE" <<EOF
 #!/bin/bash
 if [ -f "$SETUP_COMPLETE_FLAG" ]; then
     echo ""
@@ -94,7 +95,7 @@ else
     echo ""
 fi
 EOF
-    sudo chmod +x /etc/update-motd.d/99-plane-status
+    sudo chmod +x $MOTD_FILE
     
     # Run update-motd to generate /run/motd.dynamic
     sudo run-parts /etc/update-motd.d/ > /run/motd.dynamic 2>/dev/null || true
