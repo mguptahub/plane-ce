@@ -66,6 +66,7 @@ variable "manifest_file_name" {
 # Local variables for reuse
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
+  build_time = formatdate("YYYYMMDD-hhmm", timestamp())
 }
 
 # Source block defining the base image and configuration
@@ -217,5 +218,12 @@ build {
   post-processor "manifest" {
     output = var.manifest_file_name
     strip_path = true
+    custom_data = {
+      "ami_name" = "${var.ami_name_prefix}-${local.timestamp}"
+      "ami_regions" = var.ami_regions
+      "base_image_owner" = var.base_image_owner
+      "prime_host" = var.prime_host
+      "build_time" = local.build_time
+    }
   }
 } 
