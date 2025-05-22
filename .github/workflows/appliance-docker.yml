@@ -92,14 +92,14 @@ jobs:
         id: validate
         run: "packer validate ./deploy/packer/ee-docker-aws-ami.pkr.hcl"
 
-      - name: Run `packer build`
-        id: build
+      - name: Make Variables File
+        id: make_variables_file
         run: |
           touch variables.pkrvars.hcl
-          echo "vpc_cidr = ${AWS_VPC_CIDR}" >> variables.pkrvars.hcl
-          echo "subnet_cidr = ${AWS_SUBNET_CIDR}" >> variables.pkrvars.hcl
-          echo "base_image_owner = ${AWS_BASE_IMAGE_OWNER}" >> variables.pkrvars.hcl
-          echo "prime_host = ${PRIME_HOST}" >> variables.pkrvars.hcl
+          echo 'vpc_cidr = "${AWS_VPC_CIDR}"' >> variables.pkrvars.hcl
+          echo 'subnet_cidr = "${AWS_SUBNET_CIDR}"' >> variables.pkrvars.hcl
+          echo 'base_image_owner = "${AWS_BASE_IMAGE_OWNER}"' >> variables.pkrvars.hcl
+          echo 'prime_host = "${PRIME_HOST}"' >> variables.pkrvars.hcl
 
           if [ "${{ env.AMI_PUBLISH_REGION }}" == "VPC" ]; then
             echo 'ami_regions = ["${AWS_VPC_REGION}"]' >> variables.pkrvars.hcl
@@ -109,6 +109,9 @@ jobs:
 
           cat variables.pkrvars.hcl
 
+      - name: Run `packer build`
+        id: build
+        run: |
           packer build \
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
