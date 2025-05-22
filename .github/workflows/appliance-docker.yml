@@ -119,22 +119,47 @@ jobs:
       - name: Cleanup Old AMIs
         if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
         run: |
-          OLD_AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json | cut -d ":" -f2)
-          if [ ! -z "$OLD_AMI_ID" ]; then
-            echo "Found previous AMI: $OLD_AMI_ID"
-            # Deregister the old AMI
-            aws ec2 deregister-image --image-id "$OLD_AMI_ID" || true
-            echo "Deregistered previous AMI: $OLD_AMI_ID"
-          fi
+          # Extract all AMI IDs from the artifact_id field
+          OLD_AMI_STRING=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json)
+          
+          # Split the AMI string into individual AMI IDs
+          IFS=',' read -ra AMI_ARRAY <<< "$OLD_AMI_STRING"
+          
+          for ami in "${AMI_ARRAY[@]}"; do
+            # Extract just the AMI ID part after the region prefix
+            AMI_ID=$(echo "$ami" | cut -d ":" -f2)
+            if [ ! -z "$AMI_ID" ]; then
+              echo "Found previous AMI: $AMI_ID"
+              # Get the region from the AMI string
+              REGION=$(echo "$ami" | cut -d ":" -f1)
+              echo "Deregistering AMI in region: $REGION"
+              # Deregister the AMI in the specific region
+              aws ec2 deregister-image --region "$REGION" --image-id "$AMI_ID" || true
+              echo "Deregistered previous AMI: $AMI_ID in region $REGION"
+            fi
+          done
 
-      - name: Extract AMI Information
+      - name: Extract AMI Information and Create Summary
         id: ami_info
         run: |
-          # Extract AMI ID and other details from manifest
-          AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-manifest.json | cut -d ":" -f2)
+          # Extract AMI details from manifest
+          AMI_STRING=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-manifest.json)
           AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ee-docker-aws-ami-manifest.json)
-          REGION=$(jq -r '.builds[-1].custom_data.region' ee-docker-aws-ami-manifest.json)
           BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ee-docker-aws-ami-manifest.json)
+          
+          # Create array of AMI information
+          declare -a AMI_INFO
+          IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
+          for ami in "${AMI_ARRAY[@]}"; do
+            REGION=$(echo "$ami" | cut -d ":" -f1)
+            AMI_ID=$(echo "$ami" | cut -d ":" -f2)
+            AMI_INFO+=("$REGION:$AMI_ID")
+          done
+          
+          # For GitHub Actions output, use the first AMI's information
+          PRIMARY_AMI=${AMI_INFO[0]}
+          PRIMARY_REGION=${PRIMARY_AMI%:*}
+          PRIMARY_AMI_ID=${PRIMARY_AMI#*:}
           
           # Add git information to manifest
           jq --arg branch "${{ github.ref_name }}" \
@@ -144,15 +169,39 @@ jobs:
              ee-docker-aws-ami-manifest.json > enhanced-ee-docker-aws-ami-manifest.json
           mv enhanced-ee-docker-aws-ami-manifest.json ee-docker-aws-ami-manifest.json
           
-          echo "AMI_ID=${AMI_ID}" >> $GITHUB_OUTPUT
+          # Output primary AMI info for GitHub Actions
+          echo "AMI_ID=${PRIMARY_AMI_ID}" >> $GITHUB_OUTPUT
           echo "AMI_NAME=${AMI_NAME}" >> $GITHUB_OUTPUT
-          echo "REGION=${REGION}" >> $GITHUB_OUTPUT
+          echo "REGION=${PRIMARY_REGION}" >> $GITHUB_OUTPUT
           
+          # Create build summary with all AMIs
+          {
+            echo "### 🚀 Plane EE Docker AWS Build Summary"
+            echo "| Detail | Value |"
+            echo "| --- | --- |"
+            echo "| AMI Name | \`${AMI_NAME}\` |"
+            echo "| Build Time | \`${BUILD_TIME}\` |"
+            echo
+            echo "### 🌎 Regional AMI Distribution"
+            echo "| Region | AMI ID |"
+            echo "| --- | --- |"
+            for ami_info in "${AMI_INFO[@]}"; do
+              region=${ami_info%:*}
+              ami_id=${ami_info#*:}
+              echo "| \`${region}\` | \`${ami_id}\` |"
+            done
+          } >> $GITHUB_STEP_SUMMARY
+          
+          # Console output for logs
           echo "✅ AMI built successfully!"
-          echo "🔹 AMI ID: ${AMI_ID}"
           echo "🔹 AMI Name: ${AMI_NAME}"
-          echo "🔹 Region: ${REGION}"
           echo "🔹 Build Time: ${BUILD_TIME}"
+          echo "🔹 AMI Information:"
+          for ami_info in "${AMI_INFO[@]}"; do
+            region=${ami_info%:*}
+            ami_id=${ami_info#*:}
+            echo "   • Region: ${region}, AMI ID: ${ami_id}"
+          done
 
       - name: Store Manifest in S3
         run: |
@@ -169,20 +218,23 @@ jobs:
           path: ce-aws-ami-manifest.json
           retention-days: 30
 
-      - name: Create Build Summary
+      - name: Tag AMIs
         run: |
-          echo "### 🚀 Plane EE Docker AWS Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| AMI ID | \`${{ steps.ami_info.outputs.AMI_ID }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| AMI Name | \`${{ steps.ami_info.outputs.AMI_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Region | \`${{ steps.ami_info.outputs.REGION }}\` |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Tag AMI
-        run: |
-          aws ec2 create-tags \
-            --resources ${{ steps.ami_info.outputs.AMI_ID }} \
-            --tags \
-              Key=GitBranch,Value=${{ github.ref_name }} \
-              Key=GitCommit,Value=${{ github.sha }} \
-              Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          # Extract AMI string again
+          AMI_STRING=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-manifest.json)
+          
+          # Process and tag each AMI in its respective region
+          IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
+          for ami in "${AMI_ARRAY[@]}"; do
+            REGION=$(echo "$ami" | cut -d ":" -f1)
+            AMI_ID=$(echo "$ami" | cut -d ":" -f2)
+            
+            echo "Tagging AMI ${AMI_ID} in region ${REGION}"
+            aws ec2 create-tags \
+              --region "$REGION" \
+              --resources "$AMI_ID" \
+              --tags \
+                Key=GitBranch,Value=${{ github.ref_name }} \
+                Key=GitCommit,Value=${{ github.sha }} \
+                Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          done
