@@ -102,7 +102,7 @@ jobs:
           echo "base_image_owner = \"${AWS_BASE_IMAGE_OWNER}\"" >> variables.pkrvars.hcl
           echo "prime_host = \"${PRIME_HOST}\"" >> variables.pkrvars.hcl
           echo "instance_type = \"t3a.xlarge\"" >> variables.pkrvars.hcl
-          echo "manifest_file_name = \"${CURRENT_MANIFEST_FILE}\"" >> variables.pkrvars.hcl
+          echo "manifest_file_name = \"${{ env.CURRENT_MANIFEST_FILE }}\"" >> variables.pkrvars.hcl
 
           # split AMI_PUBLISH_REGION by comma and add to ami_regions
           ami_regions=$(echo "${AMI_PUBLISH_REGION}" | sed 's/[[:space:]]*,[[:space:]]*/\n/g' | jq -R . | jq -s -c .)
@@ -146,9 +146,9 @@ jobs:
         id: ami_info
         run: |
           # Extract AMI details from manifest
-          AMI_STRING=$(jq -r '.builds[-1].artifact_id' $CURRENT_MANIFEST_FILE)
-          AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' $CURRENT_MANIFEST_FILE)
-          BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' $CURRENT_MANIFEST_FILE)
+          AMI_STRING=$(jq -r '.builds[-1].artifact_id' ${{env.CURRENT_MANIFEST_FILE}})
+          AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ${{env.CURRENT_MANIFEST_FILE}})
+          BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ${{env.CURRENT_MANIFEST_FILE}})
           
           # Create array of AMI information
           declare -a AMI_INFO
@@ -164,8 +164,8 @@ jobs:
              --arg commit "${{ github.sha }}" \
              --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
              '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
-             $CURRENT_MANIFEST_FILE > temp-manifest.json
-          mv temp-manifest.json $CURRENT_MANIFEST_FILE
+             ${{env.CURRENT_MANIFEST_FILE}} > temp-manifest.json
+          mv temp-manifest.json ${{env.CURRENT_MANIFEST_FILE}}
           
           # Create build summary with all AMIs
           {
@@ -191,22 +191,22 @@ jobs:
       - name: Store Manifest in S3
         run: |
           # Store the current manifest as latest
-          aws s3 cp $CURRENT_MANIFEST_FILE s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
+          aws s3 cp ${{env.CURRENT_MANIFEST_FILE}} s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
           
           # Also store a versioned copy
-          aws s3 cp $CURRENT_MANIFEST_FILE "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
+          aws s3 cp ${{env.CURRENT_MANIFEST_FILE}} "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
 
       - name: Upload Build Manifest as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ee-docker-aws-ami-manifest
-          path: $CURRENT_MANIFEST_FILE
+          path: ${{env.CURRENT_MANIFEST_FILE}}
           retention-days: 30
 
       - name: Tag AMIs
         run: |
           # Extract AMI string again
-          AMI_STRING=$(jq -r '.builds[-1].artifact_id' $CURRENT_MANIFEST_FILE)
+          AMI_STRING=$(jq -r '.builds[-1].artifact_id' ${{env.CURRENT_MANIFEST_FILE}})
           
           # Process and tag each AMI in its respective region
           IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
