@@ -102,11 +102,8 @@ jobs:
           echo "instance_type = \"t3a.xlarge\"" >> variables.pkrvars.hcl
 
           # split AMI_PUBLISH_REGION by comma and add to ami_regions
-          IFS=',' read -ra AMI_PUBLISH_REGIONS <<< "${AMI_PUBLISH_REGION}"
-          for region in "${AMI_PUBLISH_REGIONS[@]}"; do
-            echo "ami_regions = [\"${region}\"]" >> variables.pkrvars.hcl
-          done
-
+          ami_regions=$(echo "${AMI_PUBLISH_REGION}" | sed 's/[[:space:]]*,[[:space:]]*/,/g' | jq -R . | jq -s .)
+          echo "ami_regions = ${ami_regions}" >> variables.pkrvars.hcl
 
           cat variables.pkrvars.hcl
 
