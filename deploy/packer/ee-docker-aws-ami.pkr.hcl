@@ -219,10 +219,9 @@ build {
     output = var.manifest_file_name
     strip_path = true
     custom_data = {
-      "ami_name" = "${var.ami_name_prefix}-${local.timestamp}"
-      "ami_regions" = var.ami_regions
-      "base_image_owner" = var.base_image_owner
-      "prime_host" = var.prime_host
+      "ami_name" = "${var.ami_name_prefix}-${local.timestamp}",
+      "base_image_owner" = var.base_image_owner,
+      "prime_host" = var.prime_host,
       "build_time" = local.build_time
     }
   }
