@@ -3,27 +3,6 @@ name: Appliance Build Docker
 on:
   workflow_dispatch:
     inputs:
-      build_aws_appliance_ee:
-        description: 'Build Plane-EE AWS Appliance'
-        required: true
-        type: boolean
-        default: false
-      aws_manifest_bucket:
-        description: 'AWS Manifest Bucket'
-        required: true
-        default: 'plane-terraform-state-dev'
-      aws_vpc_cidr:
-        description: 'AWS VPC CIDR'
-        required: true
-        default: '10.22.0.0/16'
-      aws_subnet_cidr:
-        description: 'AWS Subnet CIDR'
-        required: true
-        default: '10.22.1.0/24'
-      aws_vpc_region:
-        description: 'AWS VPC Region'
-        required: true
-        default: 'us-east-1'
       ami_prefix:
         description: 'AMI Prefix'
         required: true
@@ -37,27 +16,46 @@ on:
         type: string
         required: true
         default: 'us-east-1'
+      aws_manifest_bucket:
+        description: 'AWS Manifest Bucket (devops)'
+        required: true
+        default: 'plane-terraform-state-dev'
+      aws_vpc_cidr:
+        description: 'AWS VPC CIDR (devops)'
+        required: true
+        default: '10.22.0.0/16'
+      aws_subnet_cidr:
+        description: 'AWS Subnet CIDR (devops)'
+        required: true
+        default: '10.22.1.0/24'
+      aws_vpc_region:
+        description: 'AWS VPC Region (devops)'
+        required: true
+        default: 'us-east-1'
 
 env:
-  AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_KEY: ${{ secrets.PLANE_DEV_AWS_SECRET_ACCESS_KEY }}
+  # Inputs
+  AMI_PREFIX: ${{ inputs.ami_prefix || 'plane-commercial' }}
+  PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
+  AMI_PUBLISH_REGION: ${{ inputs.ami_publish_region || 'VPC' }}
+  # Inputs by Devops
   AWS_MANIFEST_BUCKET: ${{ inputs.aws_manifest_bucket || 'plane-terraform-state-dev' }}
-
   AWS_VPC_CIDR: ${{ inputs.aws_vpc_cidr || '10.22.0.0/16' }}
   AWS_SUBNET_CIDR: ${{ inputs.aws_subnet_cidr || '10.22.1.0/24' }}
   AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
   AWS_BASE_IMAGE_OWNER: '099720109477'
-  PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
-  AMI_PREFIX: ${{ inputs.ami_prefix || 'plane-commercial' }}
-  AMI_PUBLISH_REGION: ${{ inputs.ami_publish_region || 'VPC' }}
-  
+  # Secrets
+  AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_KEY: ${{ secrets.PLANE_DEV_AWS_SECRET_ACCESS_KEY }}
+  # Constants
   CURRENT_MANIFEST_FILE: 'ee-docker-aws-ami-manifest.json'
+  LATEST_MANIFEST_FILE: 'ee-docker-aws-ami-latest-manifest.json'
   PREVIOUS_MANIFEST_FILE: 'ee-docker-aws-ami-previous-manifest.json'
+  EE_PACKER_FILE: 'ee-docker-aws-ami.pkr.hcl'
 
 jobs:
 
   build_aws_appliance_ee:
-    if: inputs.build_aws_appliance_ee == true
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Repository
@@ -73,7 +71,7 @@ jobs:
       - name: Download Previous Manifest
         run: |
           # Download the previous manifest from S3 if it exists
-          aws s3 cp s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json ./ee-docker-aws-ami-previous-manifest.json || true
+          aws s3 cp s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/${{ env.LATEST_MANIFEST_FILE }} ./${{ env.PREVIOUS_MANIFEST_FILE }} || true
 
       - name: Setup `packer`
         uses: hashicorp/setup-packer@main
@@ -87,11 +85,11 @@ jobs:
 
       - name: Run `packer init`
         id: init
-        run: "packer init ./deploy/packer/ee-docker-aws-ami.pkr.hcl"
+        run: "packer init ./deploy/packer/${{ env.EE_PACKER_FILE }}"
 
       - name: Run `packer validate`
         id: validate
-        run: "packer validate ./deploy/packer/ee-docker-aws-ami.pkr.hcl"
+        run: "packer validate ./deploy/packer/${{ env.EE_PACKER_FILE }}"
 
       - name: Make Variables File
         id: make_variables_file
@@ -118,7 +116,7 @@ jobs:
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
             -var-file=variables.pkrvars.hcl \
-            ./deploy/packer/ee-docker-aws-ami.pkr.hcl
+            ./deploy/packer/${{ env.EE_PACKER_FILE }}
 
       - name: Cleanup Old AMIs
         if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
@@ -160,11 +158,6 @@ jobs:
             AMI_INFO+=("$REGION:$AMI_ID")
           done
           
-          # For GitHub Actions output, use the first AMI's information
-          PRIMARY_AMI=${AMI_INFO[0]}
-          PRIMARY_REGION=${PRIMARY_AMI%:*}
-          PRIMARY_AMI_ID=${PRIMARY_AMI#*:}
-          
           # Add git information to manifest
           jq --arg branch "${{ github.ref_name }}" \
              --arg commit "${{ github.sha }}" \
@@ -173,19 +166,8 @@ jobs:
              $CURRENT_MANIFEST_FILE > temp-manifest.json
           mv temp-manifest.json $CURRENT_MANIFEST_FILE
           
-          # Output primary AMI info for GitHub Actions
-          echo "AMI_ID=${PRIMARY_AMI_ID}" >> $GITHUB_OUTPUT
-          echo "AMI_NAME=${AMI_NAME}" >> $GITHUB_OUTPUT
-          echo "REGION=${PRIMARY_REGION}" >> $GITHUB_OUTPUT
-          
           # Create build summary with all AMIs
           {
-            echo "### 🚀 Plane EE Docker AWS Build Summary"
-            echo "| Detail | Value |"
-            echo "| --- | --- |"
-            echo "| AMI Name | \`${AMI_NAME}\` |"
-            echo "| Build Time | \`${BUILD_TIME}\` |"
-            echo
             echo "### 🌎 Regional AMI Distribution"
             echo "| Region | AMI ID |"
             echo "| --- | --- |"
@@ -198,8 +180,6 @@ jobs:
           
           # Console output for logs
           echo "✅ AMI built successfully!"
-          echo "🔹 AMI Name: ${AMI_NAME}"
-          echo "🔹 Build Time: ${BUILD_TIME}"
           echo "🔹 AMI Information:"
           for ami_info in "${AMI_INFO[@]}"; do
             region=${ami_info%:*}
