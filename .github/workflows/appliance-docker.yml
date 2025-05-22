@@ -33,13 +33,10 @@ on:
         required: true
         default: 'https://prime.plane.so'
       ami_publish_region:
-        description: 'AMI Publish Region'
-        type: choice
+        description: 'AMI Publish Regions (comma separated)'
+        type: string
         required: true
-        options:
-          - VPC
-          - Global
-        default: 'VPC'
+        default: 'us-east-1'
 
 env:
   AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
@@ -96,96 +93,99 @@ jobs:
         id: make_variables_file
         run: |
           touch variables.pkrvars.hcl
+          echo "aws_region = \"${AWS_VPC_REGION}\"" >> variables.pkrvars.hcl
+          echo "ami_name_prefix = \"${AMI_PREFIX}\"" >> variables.pkrvars.hcl
           echo "vpc_cidr = \"${AWS_VPC_CIDR}\"" >> variables.pkrvars.hcl
           echo "subnet_cidr = \"${AWS_SUBNET_CIDR}\"" >> variables.pkrvars.hcl
           echo "base_image_owner = \"${AWS_BASE_IMAGE_OWNER}\"" >> variables.pkrvars.hcl
           echo "prime_host = \"${PRIME_HOST}\"" >> variables.pkrvars.hcl
+          echo "instance_type = \"t3a.xlarge\"" >> variables.pkrvars.hcl
 
-          if [ "${{ env.AMI_PUBLISH_REGION }}" == "VPC" ]; then
-            echo "ami_regions = [\"${AWS_VPC_REGION}\"]" >> variables.pkrvars.hcl
-          else
-            echo "ami_regions = [\"us-east-1\",\"us-east-2\"]" >> variables.pkrvars.hcl
-          fi
+          # split AMI_PUBLISH_REGION by comma and add to ami_regions
+          IFS=',' read -ra AMI_PUBLISH_REGIONS <<< "${AMI_PUBLISH_REGION}"
+          for region in "${AMI_PUBLISH_REGIONS[@]}"; do
+            echo "ami_regions = [\"${region}\"]" >> variables.pkrvars.hcl
+          done
+
 
           cat variables.pkrvars.hcl
 
-      - name: Run `packer build`
-        id: build
-        run: |
-          packer build \
-            -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
-            -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
-            -var "ami_name_prefix=${{ env.AMI_PREFIX }}" \
-            -var-file=variables.pkrvars.hcl \
-            ./deploy/packer/ee-docker-aws-ami.pkr.hcl
+      # - name: Run `packer build`
+      #   id: build
+      #   run: |
+      #     packer build \
+      #       -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
+      #       -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
+      #       -var-file=variables.pkrvars.hcl \
+      #       ./deploy/packer/ee-docker-aws-ami.pkr.hcl
 
-      - name: Cleanup Old AMIs
-        if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
-        run: |
-          OLD_AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json | cut -d ":" -f2)
-          if [ ! -z "$OLD_AMI_ID" ]; then
-            echo "Found previous AMI: $OLD_AMI_ID"
-            # Deregister the old AMI
-            aws ec2 deregister-image --image-id "$OLD_AMI_ID" || true
-            echo "Deregistered previous AMI: $OLD_AMI_ID"
-          fi
+      # - name: Cleanup Old AMIs
+      #   if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
+      #   run: |
+      #     OLD_AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json | cut -d ":" -f2)
+      #     if [ ! -z "$OLD_AMI_ID" ]; then
+      #       echo "Found previous AMI: $OLD_AMI_ID"
+      #       # Deregister the old AMI
+      #       aws ec2 deregister-image --image-id "$OLD_AMI_ID" || true
+      #       echo "Deregistered previous AMI: $OLD_AMI_ID"
+      #     fi
 
-      - name: Extract AMI Information
-        id: ami_info
-        run: |
-          # Extract AMI ID and other details from manifest
-          AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-manifest.json | cut -d ":" -f2)
-          AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ee-docker-aws-ami-manifest.json)
-          REGION=$(jq -r '.builds[-1].custom_data.region' ee-docker-aws-ami-manifest.json)
-          BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ee-docker-aws-ami-manifest.json)
+      # - name: Extract AMI Information
+      #   id: ami_info
+      #   run: |
+      #     # Extract AMI ID and other details from manifest
+      #     AMI_ID=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-manifest.json | cut -d ":" -f2)
+      #     AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ee-docker-aws-ami-manifest.json)
+      #     REGION=$(jq -r '.builds[-1].custom_data.region' ee-docker-aws-ami-manifest.json)
+      #     BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ee-docker-aws-ami-manifest.json)
           
-          # Add git information to manifest
-          jq --arg branch "${{ github.ref_name }}" \
-             --arg commit "${{ github.sha }}" \
-             --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-             '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
-             ee-docker-aws-ami-manifest.json > enhanced-ee-docker-aws-ami-manifest.json
-          mv enhanced-ee-docker-aws-ami-manifest.json ee-docker-aws-ami-manifest.json
+      #     # Add git information to manifest
+      #     jq --arg branch "${{ github.ref_name }}" \
+      #        --arg commit "${{ github.sha }}" \
+      #        --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+      #        '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
+      #        ee-docker-aws-ami-manifest.json > enhanced-ee-docker-aws-ami-manifest.json
+      #     mv enhanced-ee-docker-aws-ami-manifest.json ee-docker-aws-ami-manifest.json
           
-          echo "AMI_ID=${AMI_ID}" >> $GITHUB_OUTPUT
-          echo "AMI_NAME=${AMI_NAME}" >> $GITHUB_OUTPUT
-          echo "REGION=${REGION}" >> $GITHUB_OUTPUT
+      #     echo "AMI_ID=${AMI_ID}" >> $GITHUB_OUTPUT
+      #     echo "AMI_NAME=${AMI_NAME}" >> $GITHUB_OUTPUT
+      #     echo "REGION=${REGION}" >> $GITHUB_OUTPUT
           
-          echo "✅ AMI built successfully!"
-          echo "🔹 AMI ID: ${AMI_ID}"
-          echo "🔹 AMI Name: ${AMI_NAME}"
-          echo "🔹 Region: ${REGION}"
-          echo "🔹 Build Time: ${BUILD_TIME}"
+      #     echo "✅ AMI built successfully!"
+      #     echo "🔹 AMI ID: ${AMI_ID}"
+      #     echo "🔹 AMI Name: ${AMI_NAME}"
+      #     echo "🔹 Region: ${REGION}"
+      #     echo "🔹 Build Time: ${BUILD_TIME}"
 
-      - name: Store Manifest in S3
-        run: |
-          # Store the current manifest as latest
-          aws s3 cp ee-docker-aws-ami-manifest.json s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
+      # - name: Store Manifest in S3
+      #   run: |
+      #     # Store the current manifest as latest
+      #     aws s3 cp ee-docker-aws-ami-manifest.json s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
           
-          # Also store a versioned copy
-          aws s3 cp ee-docker-aws-ami-manifest.json "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
+      #     # Also store a versioned copy
+      #     aws s3 cp ee-docker-aws-ami-manifest.json "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
 
-      - name: Upload Build Manifest as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ee-docker-aws-ami-manifest
-          path: ce-aws-ami-manifest.json
-          retention-days: 30
+      # - name: Upload Build Manifest as Artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ee-docker-aws-ami-manifest
+      #     path: ce-aws-ami-manifest.json
+      #     retention-days: 30
 
-      - name: Create Build Summary
-        run: |
-          echo "### 🚀 Plane EE Docker AWS Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| AMI ID | \`${{ steps.ami_info.outputs.AMI_ID }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| AMI Name | \`${{ steps.ami_info.outputs.AMI_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Region | \`${{ steps.ami_info.outputs.REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+      # - name: Create Build Summary
+      #   run: |
+      #     echo "### 🚀 Plane EE Docker AWS Build Summary" >> $GITHUB_STEP_SUMMARY
+      #     echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+      #     echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+      #     echo "| AMI ID | \`${{ steps.ami_info.outputs.AMI_ID }}\` |" >> $GITHUB_STEP_SUMMARY
+      #     echo "| AMI Name | \`${{ steps.ami_info.outputs.AMI_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+      #     echo "| Region | \`${{ steps.ami_info.outputs.REGION }}\` |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Tag AMI
-        run: |
-          aws ec2 create-tags \
-            --resources ${{ steps.ami_info.outputs.AMI_ID }} \
-            --tags \
-              Key=GitBranch,Value=${{ github.ref_name }} \
-              Key=GitCommit,Value=${{ github.sha }} \
-              Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      # - name: Tag AMI
+      #   run: |
+      #     aws ec2 create-tags \
+      #       --resources ${{ steps.ami_info.outputs.AMI_ID }} \
+      #       --tags \
+      #         Key=GitBranch,Value=${{ github.ref_name }} \
+      #         Key=GitCommit,Value=${{ github.sha }} \
+      #         Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
