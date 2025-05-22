@@ -32,10 +32,14 @@ on:
         description: 'Prime Host'
         required: true
         default: 'https://prime.plane.so'
-      # ami_regions:
-      #   description: 'AMI Publish Regions (comma separated)'
-      #   required: true
-      #   default: 'us-east-1'
+      ami_publish_region:
+        description: 'AMI Publish Region'
+        type: choice
+        required: true
+        options:
+          - VPC
+          - Global
+        default: 'VPC'
 
 env:
   AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
@@ -48,7 +52,7 @@ env:
   AWS_BASE_IMAGE_OWNER: '099720109477'
   PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
   AMI_PREFIX: ${{ inputs.ami_prefix || 'plane-commercial' }}
-  # AMI_REGIONS: ${{ inputs.ami_regions || 'us-east-1' }}
+  AMI_PUBLISH_REGION: ${{ inputs.ami_publish_region || 'VPC' }}
 jobs:
 
   build_aws_appliance_ee:
@@ -91,6 +95,12 @@ jobs:
       - name: Run `packer build`
         id: build
         run: |
+          if [ "${{ env.AMI_PUBLISH_REGION }}" == "VPC" ]; then
+            ami_regions=["${{env.AWS_VPC_REGION}}"]
+          else
+            ami_regions=["us-east-1","us-east-2"]
+          fi
+
           packer build \
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
@@ -99,6 +109,7 @@ jobs:
             -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
             -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
             -var "prime_host=${{ env.PRIME_HOST }}" \
+            -var 'ami_regions=${ami_regions}' \
             ./deploy/packer/ee-docker-aws-ami.pkr.hcl
 
       - name: Cleanup Old AMIs
