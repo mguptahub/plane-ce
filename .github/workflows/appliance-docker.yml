@@ -107,6 +107,8 @@ jobs:
             echo 'ami_regions = ["us-east-1","us-east-2"]' >> variables.pkrvars.hcl
           fi
 
+          cat variables.pkrvars.hcl
+
           packer build \
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
