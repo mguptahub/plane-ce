@@ -58,6 +58,11 @@ variable "instance_type" {
   default = "t3a.xlarge"
 }
 
+variable "manifest_file_name" {
+  type    = string
+  default = "ee-docker-aws-ami-manifest.json"
+}
+
 # Local variables for reuse
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
@@ -200,7 +205,6 @@ build {
       "TERM=xterm-256color",
     ]
     inline = [
-      "sudo prime-cli uninstall -s",
       "sudo rm /etc/update-motd.d/99-plane-status",
       "sudo rm /var/lib/cloud/instance/plane-setup-complete",
       "sudo rm /var/lib/cloud/instance/plane-setup-status",
@@ -210,7 +214,7 @@ build {
 
   # Post-processor for potential AMI modifications
   post-processor "manifest" {
-    output = "ee-docker-aws-ami-manifest.json"
+    output = var.manifest_file_name
     strip_path = true
   }
 } 

@@ -102,6 +102,7 @@ jobs:
           echo "base_image_owner = \"${AWS_BASE_IMAGE_OWNER}\"" >> variables.pkrvars.hcl
           echo "prime_host = \"${PRIME_HOST}\"" >> variables.pkrvars.hcl
           echo "instance_type = \"t3a.xlarge\"" >> variables.pkrvars.hcl
+          echo "manifest_file_name = \"${CURRENT_MANIFEST_FILE}\"" >> variables.pkrvars.hcl
 
           # split AMI_PUBLISH_REGION by comma and add to ami_regions
           ami_regions=$(echo "${AMI_PUBLISH_REGION}" | sed 's/[[:space:]]*,[[:space:]]*/\n/g' | jq -R . | jq -s -c .)
