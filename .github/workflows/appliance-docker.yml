@@ -95,21 +95,23 @@ jobs:
       - name: Run `packer build`
         id: build
         run: |
+          touch variables.pkrvars.hcl
+          echo "vpc_cidr = ${AWS_VPC_CIDR}" >> variables.pkrvars.hcl
+          echo "subnet_cidr = ${AWS_SUBNET_CIDR}" >> variables.pkrvars.hcl
+          echo "base_image_owner = ${AWS_BASE_IMAGE_OWNER}" >> variables.pkrvars.hcl
+          echo "prime_host = ${PRIME_HOST}" >> variables.pkrvars.hcl
+
           if [ "${{ env.AMI_PUBLISH_REGION }}" == "VPC" ]; then
-            ami_regions=["${{env.AWS_VPC_REGION}}"]
+            echo 'ami_regions = ["${AWS_VPC_REGION}"]' >> variables.pkrvars.hcl
           else
-            ami_regions=["us-east-1","us-east-2"]
+            echo 'ami_regions = ["us-east-1","us-east-2"]' >> variables.pkrvars.hcl
           fi
 
           packer build \
             -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
             -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
             -var "ami_name_prefix=${{ env.AMI_PREFIX }}" \
-            -var "vpc_cidr=${{ env.AWS_VPC_CIDR }}" \
-            -var "subnet_cidr=${{ env.AWS_SUBNET_CIDR }}" \
-            -var "base_image_owner=${{ env.AWS_BASE_IMAGE_OWNER }}" \
-            -var "prime_host=${{ env.PRIME_HOST }}" \
-            -var 'ami_regions=${ami_regions}' \
+            -var-file=variables.pkrvars.hcl \
             ./deploy/packer/ee-docker-aws-ami.pkr.hcl
 
       - name: Cleanup Old AMIs
