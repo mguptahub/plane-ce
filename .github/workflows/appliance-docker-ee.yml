@@ -1,4 +1,4 @@
-name: Appliance Build Docker
+name: Appliance Build Docker EE
 
 on:
   workflow_dispatch:
