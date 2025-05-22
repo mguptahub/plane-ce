@@ -74,7 +74,8 @@ source "amazon-ebs" "plane_aws_ami" {
   secret_key    = var.aws_secret_key
   region        = var.aws_region
   ami_name      = "${var.ami_name_prefix}-${local.timestamp}"
-  instance_type = var.instance_type
+  spot_instance_types = [var.instance_type]
+  spot_price    = "auto"
   encrypt_boot  = false
   ami_regions   = var.ami_regions
 
