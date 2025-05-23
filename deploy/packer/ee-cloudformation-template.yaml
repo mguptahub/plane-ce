@@ -51,14 +51,6 @@ Parameters:
   
 Mappings:
   RegionMap:
-    us-east-1:
-      AMI: "ami-0b529f3487c2c0e7f"  # Your us-east-1 AMI ID
-    us-east-2:
-      AMI: "ami-0f09ef696435ff61a"  # Your us-east-2 AMI ID
-    us-west-1:
-      AMI: "ami-062e38232f4d4253b"  # Your us-west-1 AMI ID
-    us-west-2:
-      AMI: "ami-07ceaccc0c1916f5f"  # Your us-west-2 AMI ID
 
 Metadata:
   AWS::CloudFormation::Interface:
