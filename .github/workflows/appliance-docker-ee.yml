@@ -300,6 +300,9 @@ jobs:
           # remove the last comma
           REGIONS_STRING=$(echo "$REGIONS_STRING" | sed 's/, $//')
 
+          echo "REGION_RESTRICTIONS: ${REGION_RESTRICTIONS[@]}"
+          echo "REGION_RESTRICTIONS length: ${#REGION_RESTRICTIONS[@]}"
+
           # check for length of REGION_RESTRICTIONS
           if [[ ${#REGION_RESTRICTIONS[@]} -eq 0 ]]; then
             export REGION_RESTRICTIONS_STRING="!Or [true]"
