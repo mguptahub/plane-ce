@@ -223,3 +223,96 @@ jobs:
                 Key=GitCommit,Value=${{ github.sha }} \
                 Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           done
+
+      - name: Update CloudFormation Template
+        env:
+          MANIFEST_FILE: ${{ env.CURRENT_MANIFEST_FILE }}
+          TEMPLATE_FILE: deploy/packer/plane-ee-cloudformation-template.yaml
+          OUTPUT_FILE: deploy/packer/plane-ee-cloudformation-deploy.yaml
+        run: |
+          # Install yq if not present
+          if ! command -v yq &> /dev/null; then
+            echo "Installing yq..."
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+
+          if ! command -v jq &> /dev/null; then
+              echo "Error: jq is required but not installed. Please install jq to continue."
+              exit 1
+          fi
+
+          ARTIFACT_ID=$(jq -r '.builds[0].artifact_id' "$MANIFEST_FILE")
+
+          if [[ "$ARTIFACT_ID" == "null" || -z "$ARTIFACT_ID" ]]; then
+              echo "Error: Could not extract artifact_id from manifest file"
+              exit 1
+          fi
+
+          echo "Found artifact_id: $ARTIFACT_ID"
+
+          REGIONS=()
+          AMIS=()
+
+          # Split by comma and process each region:ami pair
+          IFS=',' read -ra PAIRS <<< "$ARTIFACT_ID"
+          for pair in "${PAIRS[@]}"; do
+              # Trim whitespace
+              pair=$(echo "$pair" | xargs)
+              
+              # Split by colon to get region and ami
+              IFS=':' read -ra REGION_AMI <<< "$pair"
+              if [[ ${#REGION_AMI[@]} -eq 2 ]]; then
+                  region="${REGION_AMI[0]}"
+                  ami="${REGION_AMI[1]}"
+                  REGIONS+=("$region")
+                  AMIS+=("$ami")
+                  echo "  $region -> $ami"
+              fi
+          done
+
+          # Check if we found any AMI mappings
+          if [[ ${#REGIONS[@]} -eq 0 ]]; then
+              echo "Error: No valid region:ami pairs found in artifact_id"
+              exit 1
+          fi
+
+          # Copy the original template to output file
+          cp "$TEMPLATE_FILE" "$OUTPUT_FILE"
+
+          echo "Regions: ${REGIONS[@]}"
+          echo "AMIs: ${AMIS[@]}"
+
+          echo "Updating AMI IDs in template..."
+
+          REGION_RESTRICTIONS=()
+          # Update AMI IDs for each region found in the manifest
+          REGIONS_STRING=""
+          for i in "${!REGIONS[@]}"; do
+              region="${REGIONS[$i]}"
+              ami_id="${AMIS[$i]}"
+              echo "  Updating $region with AMI: $ami_id"
+              REGIONS_STRING+="${region}, "
+              yq eval ".Mappings.RegionMap.\"${region}\".AMI = \"${ami_id}\"" -i "$OUTPUT_FILE"
+
+              REGION_RESTRICTIONS+=("!Equals [!Ref \"AWS::Region\", \"${region}\"]")
+          done
+
+          # remove the last comma
+          REGIONS_STRING=$(echo "$REGIONS_STRING" | sed 's/, $//')
+
+          export REGION_RESTRICTIONS_STRING=$(printf "!Or [%s], " "${REGION_RESTRICTIONS[@]}" | sed 's/, $//')
+          export ASSERT_DESCRIPTION="This template can only be deployed in ${REGIONS_STRING} regions where AMIs are available."
+
+          yq eval '.Metadata["AWS::CloudFormation::Interface"].Rules.RegionRestriction.Assertions[0].Assert = env(REGION_RESTRICTIONS_STRING)' -i "$OUTPUT_FILE" 
+          yq eval '.Metadata["AWS::CloudFormation::Interface"].Rules.RegionRestriction.Assertions[0].AssertDescription = env(ASSERT_DESCRIPTION)' -i "$OUTPUT_FILE" 
+          yq eval '.Conditions.IsAllowedRegion = env(REGION_RESTRICTIONS_STRING)' -i "$OUTPUT_FILE" 
+
+          echo "Updated template saved as: $OUTPUT_FILE"
+
+      - name: Upload Updated CloudFormation Template
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudformation-template
+          path: deploy/packer/plane-ee-cloudformation-deploy.yaml
+          retention-days: 30
