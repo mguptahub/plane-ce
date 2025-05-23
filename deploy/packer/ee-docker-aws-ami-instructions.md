@@ -45,4 +45,4 @@ If you encounter issues during setup:
 2. Wait at least 5 minutes for cloud-init to complete
 3. Check the setup logs as described above
 
-For additional support, please visit our documentation at https://plane.town/docs or contact support at support@plane.town.
+For additional support, please visit our documentation at https://docs.plane.so/ or contact support at support@plane.so.
