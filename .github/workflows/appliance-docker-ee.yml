@@ -307,6 +307,8 @@ jobs:
           yq eval '.Metadata["AWS::CloudFormation::Interface"].Rules.RegionRestriction.Assertions[0].AssertDescription = env(ASSERT_DESCRIPTION)' -i "${{ env.CF_OUTPUT_FILE }}" 
           yq eval '.Conditions.IsAllowedRegion = env(REGION_RESTRICTIONS_STRING)' -i "${{ env.CF_OUTPUT_FILE }}" 
 
+          cat "${{ env.CF_OUTPUT_FILE }}"
+
           echo "Updated template saved as: ${{ env.CF_OUTPUT_FILE }}"  
 
       - name: Upload Updated CloudFormation Template
