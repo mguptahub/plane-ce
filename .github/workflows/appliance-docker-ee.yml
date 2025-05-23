@@ -300,7 +300,15 @@ jobs:
           # remove the last comma
           REGIONS_STRING=$(echo "$REGIONS_STRING" | sed 's/, $//')
 
-          export REGION_RESTRICTIONS_STRING=$(printf "!Or [%s], " "${REGION_RESTRICTIONS[@]}" | sed 's/, $//')
+          # check for length of REGION_RESTRICTIONS
+          if [[ ${#REGION_RESTRICTIONS[@]} -eq 0 ]]; then
+            export REGION_RESTRICTIONS_STRING="!Or [true]"
+          elif [[ ${#REGION_RESTRICTIONS[@]} -eq 1 ]]; then
+            export REGION_RESTRICTIONS_STRING="${REGION_RESTRICTIONS[0]}"
+          else
+            export REGION_RESTRICTIONS_STRING=$(printf "!Or [%s], " "${REGION_RESTRICTIONS[@]}" | sed 's/, $//')
+          fi
+
           export ASSERT_DESCRIPTION="This template can only be deployed in ${REGIONS_STRING} regions where AMIs are available."
 
           yq eval '.Metadata["AWS::CloudFormation::Interface"].Rules.RegionRestriction.Assertions[0].Assert = env(REGION_RESTRICTIONS_STRING)' -i "${{ env.CF_OUTPUT_FILE }}" 
