@@ -121,24 +121,14 @@ Metadata:
             AssertDescription: "Public Subnet CIDR is required when creating new infrastructure"
       RegionRestriction:
         Assertions:
-          - Assert: !Or [
-              !Equals [!Ref "AWS::Region", "us-east-1"],
-              !Equals [!Ref "AWS::Region", "us-east-2"],
-              !Equals [!Ref "AWS::Region", "us-west-1"],
-              !Equals [!Ref "AWS::Region", "us-west-2"]
-            ]
-            AssertDescription: "This template can only be deployed in us-east-1, us-east-2, us-west-1, or us-west-2 regions where AMIs are available."
+          - Assert: ToBeUpdated
+            AssertDescription: "This template can only be deployed in regions where AMIs are available."
 
 Conditions:
   CreateInfra: !Equals [!Ref CreateNewInfra, "true"]
   UseExistingInfra: !Equals [!Ref CreateNewInfra, "false"]
   IsExistingVpcProvided: !Not [!Equals [!Ref ExistingVpcId, ""]]
-  IsAllowedRegion: !Or [
-    !Equals [!Ref "AWS::Region", "us-east-1"],
-    !Equals [!Ref "AWS::Region", "us-east-2"],
-    !Equals [!Ref "AWS::Region", "us-west-1"],
-    !Equals [!Ref "AWS::Region", "us-west-2"]
-  ]
+  IsAllowedRegion: ToBeUpdated
 
 Resources:
   # VPC Resources (if creating new infrastructure)
