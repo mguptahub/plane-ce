@@ -81,7 +81,7 @@ source "amazon-ebs" "plane_aws_ami" {
 
   launch_block_device_mappings {
     device_name           = "/dev/sda1"
-    volume_size          = 15
+    volume_size          = 30
     volume_type          = "gp3"
     delete_on_termination = true
     encrypted            = false
@@ -114,7 +114,7 @@ source "amazon-ebs" "plane_aws_ami" {
   ssh_username = "ubuntu"
   
   tags = {
-    Name        = "${var.ami_name_prefix}-${local.timestamp}"
+    Name        = "${var.ami_name_prefix}"
     Environment = "Production"
     Builder     = "Packer"
   }

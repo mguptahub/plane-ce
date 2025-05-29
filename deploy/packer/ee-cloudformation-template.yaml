@@ -31,19 +31,19 @@ Parameters:
   # New Infrastructure Parameters
   VpcCidr:
     Type: String
-    Default: ""
+    Default: "10.50.0.0/16"
     Description: CIDR block for the New VPC e.g. 10.50.0.0/16 (required only if creating new infrastructure)
     
   PublicSubnetCidr:
     Type: String
-    Default: "10.50.0.0/16"
+    Default: "10.50.1.0/16"
     Description: CIDR block for the New Public Subnet e.g. 10.50.1.0/24 (required only if creating new infrastructure)
 
   # Instance Configuration
   InstanceType:
     Type: String
-    Default: t3a.large
-    Description: EC2 instance type
+    Default: t3a.xlarge
+    Description: EC2 instance type (suggested: 4vCPU, 8/16GB RAM)
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
