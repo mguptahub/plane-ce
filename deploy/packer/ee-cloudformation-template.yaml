@@ -43,7 +43,7 @@ Parameters:
   InstanceType:
     Type: String
     Default: t3a.xlarge
-    Description: EC2 instance type (suggested: 4vCPU, 8/16GB RAM)
+    Description: EC2 instance type (suggested - 4vCPU, 8/16GB RAM)
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
