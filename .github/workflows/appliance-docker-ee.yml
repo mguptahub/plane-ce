@@ -19,15 +19,15 @@ on:
       aws_manifest_bucket:
         description: 'AWS Manifest Bucket (devops)'
         required: true
-        default: 'plane-terraform-state-dev'
+        default: 'plane-terraform-marketplace'
       aws_vpc_cidr:
         description: 'AWS VPC CIDR (devops)'
         required: true
-        default: '10.22.0.0/16'
+        default: '10.34.0.0/16'
       aws_subnet_cidr:
         description: 'AWS Subnet CIDR (devops)'
         required: true
-        default: '10.22.1.0/24'
+        default: '10.34.1.0/24'
       aws_vpc_region:
         description: 'AWS VPC Region (devops)'
         required: true
@@ -45,8 +45,8 @@ env:
   AWS_VPC_REGION: ${{ inputs.aws_vpc_region || 'us-east-1' }}
   AWS_BASE_IMAGE_OWNER: '099720109477'
   # Secrets
-  AWS_ACCESS_KEY: ${{ secrets.PLANE_DEV_AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_KEY: ${{ secrets.PLANE_DEV_AWS_SECRET_ACCESS_KEY }}
+  AWS_ACCESS_KEY: ${{ secrets.MARKETPLACE_AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_KEY: ${{ secrets.MARKETPLACE_AWS_SECRET_ACCESS_KEY }}
   # Constants
   CURRENT_MANIFEST_FILE: 'ee-docker-aws-ami-manifest.json'
   LATEST_MANIFEST_FILE: 'ee-docker-aws-ami-latest-manifest.json'
