@@ -30,12 +30,12 @@ variable "ami_name_prefix" {
 
 variable "vpc_cidr" {
   type    = string
-  default = "10.22.0.0/16"
+  default = "10.34.0.0/16"
 }
 
 variable "subnet_cidr" {
   type    = string
-  default = "10.22.1.0/24"
+  default = "10.34.1.0/24"
 }
 
 variable "base_image_owner" {
