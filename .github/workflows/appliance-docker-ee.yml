@@ -37,7 +37,7 @@ env:
   # Inputs
   AMI_PREFIX: ${{ inputs.ami_prefix || 'plane-commercial' }}
   PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
-  AMI_PUBLISH_REGION: ${{ inputs.ami_publish_region || 'VPC' }}
+  AMI_PUBLISH_REGION: ${{ inputs.ami_publish_region || 'us-east-1' }}
   # Inputs by Devops
   AWS_MANIFEST_BUCKET: ${{ inputs.aws_manifest_bucket || 'plane-terraform-state-dev' }}
   AWS_VPC_CIDR: ${{ inputs.aws_vpc_cidr || '10.22.0.0/16' }}
@@ -74,158 +74,157 @@ jobs:
         run: |
           # Download the previous manifest from S3 if it exists
           aws s3 cp s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/${{ env.LATEST_MANIFEST_FILE }} ./${{ env.PREVIOUS_MANIFEST_FILE }} || true
-          cp ${{ env.PREVIOUS_MANIFEST_FILE }} ${{ env.CURRENT_MANIFEST_FILE }}
 
-      # - name: Setup `packer`
-      #   uses: hashicorp/setup-packer@main
-      #   id: setup
-      #   with:
-      #     version: latest
-      # - name: Copy Upload Assets
-      #   run: |
-      #     mkdir -p plane-dist
-      #     cp deploy/packer/cloudinit-ee/* plane-dist/
+      - name: Setup `packer`
+        uses: hashicorp/setup-packer@main
+        id: setup
+        with:
+          version: latest
+      - name: Copy Upload Assets
+        run: |
+          mkdir -p plane-dist
+          cp deploy/packer/cloudinit-ee/* plane-dist/
 
-      # - name: Run `packer init`
-      #   id: init
-      #   run: "packer init ./deploy/packer/${{ env.EE_PACKER_FILE }}"
+      - name: Run `packer init`
+        id: init
+        run: "packer init ./deploy/packer/${{ env.EE_PACKER_FILE }}"
 
-      # - name: Run `packer validate`
-      #   id: validate
-      #   run: "packer validate ./deploy/packer/${{ env.EE_PACKER_FILE }}"
+      - name: Run `packer validate`
+        id: validate
+        run: "packer validate ./deploy/packer/${{ env.EE_PACKER_FILE }}"
 
-      # - name: Make Variables File
-      #   id: make_variables_file
-      #   run: |
-      #     touch variables.pkrvars.hcl
-      #     echo "aws_region = \"${AWS_VPC_REGION}\"" >> variables.pkrvars.hcl
-      #     echo "ami_name_prefix = \"${AMI_PREFIX}\"" >> variables.pkrvars.hcl
-      #     echo "vpc_cidr = \"${AWS_VPC_CIDR}\"" >> variables.pkrvars.hcl
-      #     echo "subnet_cidr = \"${AWS_SUBNET_CIDR}\"" >> variables.pkrvars.hcl
-      #     echo "base_image_owner = \"${AWS_BASE_IMAGE_OWNER}\"" >> variables.pkrvars.hcl
-      #     echo "prime_host = \"${PRIME_HOST}\"" >> variables.pkrvars.hcl
-      #     echo "instance_type = \"t3a.xlarge\"" >> variables.pkrvars.hcl
-      #     echo "manifest_file_name = \"${{ env.CURRENT_MANIFEST_FILE }}\"" >> variables.pkrvars.hcl
+      - name: Make Variables File
+        id: make_variables_file
+        run: |
+          touch variables.pkrvars.hcl
+          echo "aws_region = \"${AWS_VPC_REGION}\"" >> variables.pkrvars.hcl
+          echo "ami_name_prefix = \"${AMI_PREFIX}\"" >> variables.pkrvars.hcl
+          echo "vpc_cidr = \"${AWS_VPC_CIDR}\"" >> variables.pkrvars.hcl
+          echo "subnet_cidr = \"${AWS_SUBNET_CIDR}\"" >> variables.pkrvars.hcl
+          echo "base_image_owner = \"${AWS_BASE_IMAGE_OWNER}\"" >> variables.pkrvars.hcl
+          echo "prime_host = \"${PRIME_HOST}\"" >> variables.pkrvars.hcl
+          echo "instance_type = \"t3a.xlarge\"" >> variables.pkrvars.hcl
+          echo "manifest_file_name = \"${{ env.CURRENT_MANIFEST_FILE }}\"" >> variables.pkrvars.hcl
 
-      #     # split AMI_PUBLISH_REGION by comma and add to ami_regions
-      #     ami_regions=$(echo "${AMI_PUBLISH_REGION}" | sed 's/[[:space:]]*,[[:space:]]*/\n/g' | jq -R . | jq -s -c .)
-      #     echo "ami_regions = ${ami_regions}" >> variables.pkrvars.hcl
+          # split AMI_PUBLISH_REGION by comma and add to ami_regions
+          ami_regions=$(echo "${AMI_PUBLISH_REGION}" | sed 's/[[:space:]]*,[[:space:]]*/\n/g' | jq -R . | jq -s -c .)
+          echo "ami_regions = ${ami_regions}" >> variables.pkrvars.hcl
 
-      #     cat variables.pkrvars.hcl
+          cat variables.pkrvars.hcl
 
-      # - name: Run `packer build`
-      #   id: build
-      #   run: |
-      #     packer build \
-      #       -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
-      #       -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
-      #       -var-file=variables.pkrvars.hcl \
-      #       ./deploy/packer/${{ env.EE_PACKER_FILE }}
+      - name: Run `packer build`
+        id: build
+        run: |
+          packer build \
+            -var "aws_access_key=${{ env.AWS_ACCESS_KEY }}" \
+            -var "aws_secret_key=${{ env.AWS_SECRET_KEY }}" \
+            -var-file=variables.pkrvars.hcl \
+            ./deploy/packer/${{ env.EE_PACKER_FILE }}
 
-      # - name: Cleanup Old AMIs
-      #   if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
-      #   run: |
-      #     # Extract all AMI IDs from the artifact_id field
-      #     OLD_AMI_STRING=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json)
+      - name: Cleanup Old AMIs
+        if: hashFiles('ee-docker-aws-ami-previous-manifest.json') != ''
+        run: |
+          # Extract all AMI IDs from the artifact_id field
+          OLD_AMI_STRING=$(jq -r '.builds[-1].artifact_id' ee-docker-aws-ami-previous-manifest.json)
           
-      #     # Split the AMI string into individual AMI IDs
-      #     IFS=',' read -ra AMI_ARRAY <<< "$OLD_AMI_STRING"
+          # Split the AMI string into individual AMI IDs
+          IFS=',' read -ra AMI_ARRAY <<< "$OLD_AMI_STRING"
           
-      #     for ami in "${AMI_ARRAY[@]}"; do
-      #       # Extract just the AMI ID part after the region prefix
-      #       AMI_ID=$(echo "$ami" | cut -d ":" -f2)
-      #       if [ ! -z "$AMI_ID" ]; then
-      #         echo "Found previous AMI: $AMI_ID"
-      #         # Get the region from the AMI string
-      #         REGION=$(echo "$ami" | cut -d ":" -f1)
-      #         echo "Deregistering AMI in region: $REGION"
-      #         # Deregister the AMI in the specific region
-      #         aws ec2 deregister-image --region "$REGION" --image-id "$AMI_ID" || true
-      #         echo "Deregistered previous AMI: $AMI_ID in region $REGION"
-      #       fi
-      #     done
+          for ami in "${AMI_ARRAY[@]}"; do
+            # Extract just the AMI ID part after the region prefix
+            AMI_ID=$(echo "$ami" | cut -d ":" -f2)
+            if [ ! -z "$AMI_ID" ]; then
+              echo "Found previous AMI: $AMI_ID"
+              # Get the region from the AMI string
+              REGION=$(echo "$ami" | cut -d ":" -f1)
+              echo "Deregistering AMI in region: $REGION"
+              # Deregister the AMI in the specific region
+              aws ec2 deregister-image --region "$REGION" --image-id "$AMI_ID" || true
+              echo "Deregistered previous AMI: $AMI_ID in region $REGION"
+            fi
+          done
 
-      # - name: Extract AMI Information and Create Summary
-      #   id: ami_info
-      #   run: |
-      #     # Extract AMI details from manifest
-      #     AMI_STRING=$(jq -r '.builds[-1].artifact_id' ${{env.CURRENT_MANIFEST_FILE}})
-      #     AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ${{env.CURRENT_MANIFEST_FILE}})
-      #     BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ${{env.CURRENT_MANIFEST_FILE}})
+      - name: Extract AMI Information and Create Summary
+        id: ami_info
+        run: |
+          # Extract AMI details from manifest
+          AMI_STRING=$(jq -r '.builds[-1].artifact_id' ${{env.CURRENT_MANIFEST_FILE}})
+          AMI_NAME=$(jq -r '.builds[-1].custom_data.ami_name' ${{env.CURRENT_MANIFEST_FILE}})
+          BUILD_TIME=$(jq -r '.builds[-1].custom_data.build_time' ${{env.CURRENT_MANIFEST_FILE}})
           
-      #     # Create array of AMI information
-      #     declare -a AMI_INFO
-      #     IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
-      #     for ami in "${AMI_ARRAY[@]}"; do
-      #       REGION=$(echo "$ami" | cut -d ":" -f1)
-      #       AMI_ID=$(echo "$ami" | cut -d ":" -f2)
-      #       AMI_INFO+=("$REGION:$AMI_ID")
-      #     done
+          # Create array of AMI information
+          declare -a AMI_INFO
+          IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
+          for ami in "${AMI_ARRAY[@]}"; do
+            REGION=$(echo "$ami" | cut -d ":" -f1)
+            AMI_ID=$(echo "$ami" | cut -d ":" -f2)
+            AMI_INFO+=("$REGION:$AMI_ID")
+          done
           
-      #     # Add git information to manifest
-      #     jq --arg branch "${{ github.ref_name }}" \
-      #        --arg commit "${{ github.sha }}" \
-      #        --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-      #        '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
-      #        ${{env.CURRENT_MANIFEST_FILE}} > temp-manifest.json
-      #     mv temp-manifest.json ${{env.CURRENT_MANIFEST_FILE}}
+          # Add git information to manifest
+          jq --arg branch "${{ github.ref_name }}" \
+             --arg commit "${{ github.sha }}" \
+             --arg build_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+             '.builds[-1].custom_data += {git_branch: $branch, git_commit: $commit, build_timestamp: $build_time}' \
+             ${{env.CURRENT_MANIFEST_FILE}} > temp-manifest.json
+          mv temp-manifest.json ${{env.CURRENT_MANIFEST_FILE}}
           
-      #     # Create build summary with all AMIs
-      #     {
-      #       echo "### 🌎 Regional AMI Distribution"
-      #       echo "| Region | AMI ID |"
-      #       echo "| --- | --- |"
-      #       for ami_info in "${AMI_INFO[@]}"; do
-      #         region=${ami_info%:*}
-      #         ami_id=${ami_info#*:}
-      #         echo "| \`${region}\` | \`${ami_id}\` |"
-      #       done
-      #     } >> $GITHUB_STEP_SUMMARY
+          # Create build summary with all AMIs
+          {
+            echo "### 🌎 Regional AMI Distribution"
+            echo "| Region | AMI ID |"
+            echo "| --- | --- |"
+            for ami_info in "${AMI_INFO[@]}"; do
+              region=${ami_info%:*}
+              ami_id=${ami_info#*:}
+              echo "| \`${region}\` | \`${ami_id}\` |"
+            done
+          } >> $GITHUB_STEP_SUMMARY
           
-      #     # Console output for logs
-      #     echo "✅ AMI built successfully!"
-      #     echo "🔹 AMI Information:"
-      #     for ami_info in "${AMI_INFO[@]}"; do
-      #       region=${ami_info%:*}
-      #       ami_id=${ami_info#*:}
-      #       echo "   • Region: ${region}, AMI ID: ${ami_id}"
-      #     done
+          # Console output for logs
+          echo "✅ AMI built successfully!"
+          echo "🔹 AMI Information:"
+          for ami_info in "${AMI_INFO[@]}"; do
+            region=${ami_info%:*}
+            ami_id=${ami_info#*:}
+            echo "   • Region: ${region}, AMI ID: ${ami_id}"
+          done
 
-      # - name: Store Manifest in S3
-      #   run: |
-      #     # Store the current manifest as latest
-      #     aws s3 cp ${{env.CURRENT_MANIFEST_FILE}} s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
+      - name: Store Manifest in S3
+        run: |
+          # Store the current manifest as latest
+          aws s3 cp ${{env.CURRENT_MANIFEST_FILE}} s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-latest-manifest.json
           
-      #     # Also store a versioned copy
-      #     aws s3 cp ${{env.CURRENT_MANIFEST_FILE}} "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
+          # Also store a versioned copy
+          aws s3 cp ${{env.CURRENT_MANIFEST_FILE}} "s3://${{ env.AWS_MANIFEST_BUCKET }}/plane-commercial/ami/manifests/ee-docker-aws-ami-manifest-${{ github.sha }}.json"
 
-      # - name: Upload Build Manifest as Artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: ee-docker-aws-ami-manifest
-      #     path: ${{env.CURRENT_MANIFEST_FILE}}
-      #     retention-days: 30
+      - name: Upload Build Manifest as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ee-docker-aws-ami-manifest
+          path: ${{env.CURRENT_MANIFEST_FILE}}
+          retention-days: 30
 
-      # - name: Tag AMIs
-      #   run: |
-      #     # Extract AMI string again
-      #     AMI_STRING=$(jq -r '.builds[-1].artifact_id' ${{env.CURRENT_MANIFEST_FILE}})
+      - name: Tag AMIs
+        run: |
+          # Extract AMI string again
+          AMI_STRING=$(jq -r '.builds[-1].artifact_id' ${{env.CURRENT_MANIFEST_FILE}})
           
-      #     # Process and tag each AMI in its respective region
-      #     IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
-      #     for ami in "${AMI_ARRAY[@]}"; do
-      #       REGION=$(echo "$ami" | cut -d ":" -f1)
-      #       AMI_ID=$(echo "$ami" | cut -d ":" -f2)
+          # Process and tag each AMI in its respective region
+          IFS=',' read -ra AMI_ARRAY <<< "$AMI_STRING"
+          for ami in "${AMI_ARRAY[@]}"; do
+            REGION=$(echo "$ami" | cut -d ":" -f1)
+            AMI_ID=$(echo "$ami" | cut -d ":" -f2)
             
-      #       echo "Tagging AMI ${AMI_ID} in region ${REGION}"
-      #       aws ec2 create-tags \
-      #         --region "$REGION" \
-      #         --resources "$AMI_ID" \
-      #         --tags \
-      #           Key=GitBranch,Value=${{ github.ref_name }} \
-      #           Key=GitCommit,Value=${{ github.sha }} \
-      #           Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-      #     done
+            echo "Tagging AMI ${AMI_ID} in region ${REGION}"
+            aws ec2 create-tags \
+              --region "$REGION" \
+              --resources "$AMI_ID" \
+              --tags \
+                Key=GitBranch,Value=${{ github.ref_name }} \
+                Key=GitCommit,Value=${{ github.sha }} \
+                Key=BuildTime,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          done
 
       - name: Update CloudFormation Template
         run: |
@@ -293,30 +292,7 @@ jobs:
               echo "  Updating $region with AMI: $ami_id"
               REGIONS_STRING+="${region}, "
               yq eval ".Mappings.RegionMap.\"${region}\".AMI = \"${ami_id}\"" -i "${{ env.CF_OUTPUT_FILE }}"
-
-              REGION_RESTRICTIONS+=("!Equals [!Ref \"AWS::Region\", \"${region}\"]")
           done
-
-          # remove the last comma
-          REGIONS_STRING=$(echo "$REGIONS_STRING" | sed 's/, $//')
-
-          echo "REGION_RESTRICTIONS: ${REGION_RESTRICTIONS[@]}"
-          echo "REGION_RESTRICTIONS length: ${#REGION_RESTRICTIONS[@]}"
-
-          # check for length of REGION_RESTRICTIONS
-          if [[ ${#REGION_RESTRICTIONS[@]} -eq 0 ]]; then
-            export REGION_RESTRICTIONS_STRING="!Or [true]"
-          elif [[ ${#REGION_RESTRICTIONS[@]} -eq 1 ]]; then
-            export REGION_RESTRICTIONS_STRING=$(printf "%s" "${REGION_RESTRICTIONS[@]}" | sed 's/, $//')
-          else
-            export REGION_RESTRICTIONS_STRING=$(printf "!Or [%s], " "${REGION_RESTRICTIONS[@]}" | sed 's/, $//')
-          fi
-
-          export ASSERT_DESCRIPTION="This template can only be deployed in ${REGIONS_STRING} regions where AMIs are available."
-
-          yq eval '.Metadata["AWS::CloudFormation::Interface"].Rules.RegionRestriction.Assertions[0].Assert = env(REGION_RESTRICTIONS_STRING)' -i "${{ env.CF_OUTPUT_FILE }}" 
-          yq eval '.Metadata["AWS::CloudFormation::Interface"].Rules.RegionRestriction.Assertions[0].AssertDescription = env(ASSERT_DESCRIPTION)' -i "${{ env.CF_OUTPUT_FILE }}" 
-          yq eval '.Conditions.IsAllowedRegion = env(REGION_RESTRICTIONS_STRING)' -i "${{ env.CF_OUTPUT_FILE }}" 
 
           cat "${{ env.CF_OUTPUT_FILE }}"
 

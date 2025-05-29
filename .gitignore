@@ -94,3 +94,4 @@ dev-editor
 *.rdb
 *.rdb.gz
 test-packer.sh
+deploy/packer/test/

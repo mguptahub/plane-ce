@@ -60,16 +60,16 @@ Metadata:
         Parameters:
           - CreateNewInfra
       - Label:
+          default: "New Infrastructure Configuration (required only if creating new infrastructure)"
+        Parameters:
+          - VpcCidr
+          - PublicSubnetCidr
+      - Label:
           default: "Existing Infrastructure Configuration (required only if not creating new infrastructure)"
         Parameters:
           - ExistingVpcId
           - ExistingSubnetId
           - ExistingSecurityGroupId
-      - Label:
-          default: "New Infrastructure Configuration (required only if creating new infrastructure)"
-        Parameters:
-          - VpcCidr
-          - PublicSubnetCidr
       - Label:
           default: "Instance Configuration"
         Parameters:
@@ -121,14 +121,14 @@ Metadata:
             AssertDescription: "Public Subnet CIDR is required when creating new infrastructure"
       RegionRestriction:
         Assertions:
-          - Assert: ToBeUpdated
-            AssertDescription: "This template can only be deployed in regions where AMIs are available."
+          - Assert: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", Allowed], "true" ]
+            AssertDescription: "This template can only be deployed in allowed regions."
 
 Conditions:
   CreateInfra: !Equals [!Ref CreateNewInfra, "true"]
   UseExistingInfra: !Equals [!Ref CreateNewInfra, "false"]
   IsExistingVpcProvided: !Not [!Equals [!Ref ExistingVpcId, ""]]
-  IsAllowedRegion: ToBeUpdated
+  IsAllowedRegion: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", Allowed], "true" ]
 
 Resources:
   # VPC Resources (if creating new infrastructure)
@@ -164,6 +164,9 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
@@ -232,9 +235,17 @@ Resources:
       SubnetId: !If [UseExistingInfra, !Ref ExistingSubnetId, !Ref PublicSubnet]
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-plane-ce'
+          Value: !Sub '${AWS::StackName}-plane-commercial'
 
 Outputs:
+  Note:
+    Description: Note about the URL of the Plane instance
+    Value: !Sub 'The URL of the Plane instance is available in the outputs below. The URL is only available after the instance is created. It might take 5-15 min based on the region and instance type'
+
+  PlaneUrl:
+    Description: URL of the Plane instance
+    Value: !If [UseExistingInfra, !Sub 'http://${EC2Instance.PrivateIp}', !Sub 'http://${EC2Instance.PublicIp}']
+
   InstanceId:
     Description: ID of the EC2 instance
     Value: !Ref EC2Instance
@@ -259,8 +270,3 @@ Outputs:
   SecurityGroupId:
     Description: ID of the Security Group (created or used)
     Value: !If [UseExistingInfra, !Ref ExistingSecurityGroupId, !Ref SecurityGroup]
-
-
-# vpc-05e2fca7fea16176e
-# subnet-0a8b50e041e43ba4c
-# sg-0848773a404c3d169
