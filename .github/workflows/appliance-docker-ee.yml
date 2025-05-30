@@ -292,6 +292,7 @@ jobs:
               echo "  Updating $region with AMI: $ami_id"
               REGIONS_STRING+="${region}, "
               yq eval ".Mappings.RegionMap.\"${region}\".AMI = \"${ami_id}\"" -i "${{ env.CF_OUTPUT_FILE }}"
+              yq eval ".Mappings.RegionMap.\"${region}\".Allowed = \"true\"" -i "${{ env.CF_OUTPUT_FILE }}"
           done
 
           cat "${{ env.CF_OUTPUT_FILE }}"
