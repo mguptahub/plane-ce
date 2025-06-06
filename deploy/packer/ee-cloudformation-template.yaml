@@ -138,10 +138,7 @@ Metadata:
         Assertions:
           - Assert: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", Allowed], "true" ]
             AssertDescription: "This template can only be deployed in allowed regions."
-      KeyNameValidation:
-        Assertions:
-          - Assert: !Not [!Equals [!Ref KeyName, ""]]
-            AssertDescription: "Key Name is required"
+
 Conditions:
   CreateInfra: !Equals [!Ref CreateNewInfra, "true"]
   UseExistingInfra: !Equals [!Ref CreateNewInfra, "false"]
