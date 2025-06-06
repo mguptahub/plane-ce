@@ -43,10 +43,11 @@ export const SubIssuesListItemProperties: React.FC<Props> = observer((props) => 
   maxDate?.setDate(maxDate.getDate());
   return (
     <div className="relative flex items-center gap-2">
-      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="start_date">
-        <div className="h-5 flex-shrink-0" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
-          <DateDropdown
-            value={issue.start_date ?? null}
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="state">
+        <div className="h-5 flex-shrink-0">
+          <StateDropdown
+            value={issue.state_id}
+            projectId={issue.project_id ?? undefined}
             onChange={(val) =>
               issue.project_id &&
               updateSubIssue(
@@ -55,17 +56,34 @@ export const SubIssuesListItemProperties: React.FC<Props> = observer((props) => 
                 parentIssueId,
                 issueId,
                 {
-                  start_date: val ? renderFormattedPayloadDate(val) : null,
+                  state_id: val,
                 },
                 { ...issue }
               )
             }
-            maxDate={maxDate}
-            placeholder={t("common.order_by.start_date")}
-            icon={<CalendarClock className="h-3 w-3 flex-shrink-0" />}
-            buttonVariant={issue.start_date ? "border-with-text" : "border-without-text"}
-            optionsClassName="z-30"
             disabled={!disabled}
+            buttonVariant="transparent-without-text"
+            buttonClassName="hover:bg-transparent px-0"
+            iconSize="size-5"
+            showTooltip
+          />
+        </div>
+      </WithDisplayPropertiesHOC>
+
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="priority">
+        <div className="h-5 flex-shrink-0">
+          <PriorityDropdown
+            value={issue.priority}
+            onChange={(val) =>
+              issue.project_id &&
+              updateSubIssue(workspaceSlug, issue.project_id, parentIssueId, issueId, {
+                priority: val,
+              })
+            }
+            disabled={!disabled}
+            buttonVariant="border-without-text"
+            buttonClassName="border"
+            showTooltip
           />
         </div>
       </WithDisplayPropertiesHOC>
@@ -93,47 +111,6 @@ export const SubIssuesListItemProperties: React.FC<Props> = observer((props) => 
             buttonVariant={issue.target_date ? "border-with-text" : "border-without-text"}
             optionsClassName="z-30"
             disabled={!disabled}
-          />
-        </div>
-      </WithDisplayPropertiesHOC>
-
-      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="state">
-        <div className="h-5 flex-shrink-0">
-          <StateDropdown
-            value={issue.state_id}
-            projectId={issue.project_id ?? undefined}
-            onChange={(val) =>
-              issue.project_id &&
-              updateSubIssue(
-                workspaceSlug,
-                issue.project_id,
-                parentIssueId,
-                issueId,
-                {
-                  state_id: val,
-                },
-                { ...issue }
-              )
-            }
-            disabled={!disabled}
-            buttonVariant="border-with-text"
-          />
-        </div>
-      </WithDisplayPropertiesHOC>
-
-      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="priority">
-        <div className="h-5 flex-shrink-0">
-          <PriorityDropdown
-            value={issue.priority}
-            onChange={(val) =>
-              issue.project_id &&
-              updateSubIssue(workspaceSlug, issue.project_id, parentIssueId, issueId, {
-                priority: val,
-              })
-            }
-            disabled={!disabled}
-            buttonVariant="border-without-text"
-            buttonClassName="border"
           />
         </div>
       </WithDisplayPropertiesHOC>
