@@ -78,18 +78,15 @@ update_status() {
 
 # Set up MOTD (Message of the Day)
 create_motd() {
-    local DOMAIN=$(hostname -I | awk '{print $1}')
-    if [ -z "$INSTANCE_DOMAIN_NAME" ]; then
-        INSTANCE_DOMAIN_NAME=$(grep INSTANCE_DOMAIN_NAME /etc/environment | cut -d'=' -f2)
-        
-        if [ -n "$INSTANCE_DOMAIN_NAME" ]; then
-            DOMAIN=$INSTANCE_DOMAIN_NAME
-        fi
-    fi
 
     sudo bash -c "cat > $MOTD_FILE" <<EOF
 #!/bin/bash
 if [ -f "$SETUP_COMPLETE_FLAG" ]; then
+    INSTANCE_DOMAIN_NAME=\$(grep INSTANCE_DOMAIN_NAME /etc/environment | cut -d'=' -f2)
+    DOMAIN=\$(hostname -I | awk '{print \$1}')
+    if [ -n "\$INSTANCE_DOMAIN_NAME" ]; then
+        DOMAIN=\$INSTANCE_DOMAIN_NAME
+    fi
     echo ""
     echo "✅ PLANE SETUP IS COMPLETE"
     echo ""
@@ -101,7 +98,7 @@ if [ -f "$SETUP_COMPLETE_FLAG" ]; then
     echo "Check help for all commands:"
     echo "  sudo prime-cli --help"
     echo ""
-    echo "You can access Plane at: http://$DOMAIN"
+    echo "You can access Plane at: http://\$DOMAIN"
 else
     echo ""
     echo "⚠️  PLANE SETUP IS STILL IN PROGRESS"
@@ -236,18 +233,13 @@ download_cli() {
 }
 
 run_setup() {
-    local DOMAIN=${INSTANCE_ADDRESS:-127.0.0.1}
+    local DOMAIN=$INSTANCE_ADDRESS
+    local INSTANCE_DOMAIN_NAME=$(grep INSTANCE_DOMAIN_NAME /etc/environment | cut -d'=' -f2)
 
-    # check if `INSTANCE_DOMAIN_NAME` is set in the environment variable or /etc/environment
-    if [ -z "$INSTANCE_DOMAIN_NAME" ]; then
-        INSTANCE_DOMAIN_NAME=$(grep INSTANCE_DOMAIN_NAME /etc/environment | cut -d'=' -f2)
-        
-        if [ -n "$INSTANCE_DOMAIN_NAME" ]; then
-            DOMAIN=$INSTANCE_DOMAIN_NAME
-        fi
+    if [ -n "$INSTANCE_DOMAIN_NAME" ]; then
+        DOMAIN=$INSTANCE_DOMAIN_NAME
     fi
-
-    # Get the domain name from the environment variable
+    
     log "Running setup with domain: $DOMAIN"
     log "Prime Host: $PRIME_HOST"
     update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"

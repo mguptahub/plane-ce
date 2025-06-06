@@ -2,6 +2,11 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudFormation template to deploy an EC2 instance with dynamic infrastructure options'
 
 Parameters:
+  InstanceDomainName:
+    Description: Domain name for the Plane instance
+    Type: String
+    Default: "plane.example.com"
+    
   CreateNewInfra:
     Description: Create new VPC, Subnet, and Security Group?
     Type: String
@@ -56,6 +61,10 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
+          default: "Instance Configuration"
+        Parameters:
+          - InstanceDomainName
+      - Label:
           default: "Infrastructure Selection"
         Parameters:
           - CreateNewInfra
@@ -76,6 +85,8 @@ Metadata:
           - InstanceType
           - KeyName
     ParameterLabels:
+      InstanceDomainName:
+        default: "Instance Domain Name"
       CreateNewInfra:
         default: "Create New Infrastructure?"
       ExistingVpcId:
@@ -93,6 +104,10 @@ Metadata:
       KeyName:
         default: "EC2 Key Pair"
     Rules:
+      InstanceDomainNameValidation:
+        Assertions:
+          - Assert: !Not [!Equals [!Ref InstanceDomainName, ""]]
+            AssertDescription: "Instance Domain Name is required"
       InfrastructureValidation:
         Assertions:
           - Assert: !Or [
@@ -123,7 +138,10 @@ Metadata:
         Assertions:
           - Assert: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", Allowed], "true" ]
             AssertDescription: "This template can only be deployed in allowed regions."
-
+      KeyNameValidation:
+        Assertions:
+          - Assert: !Not [!Equals [!Ref KeyName, ""]]
+            AssertDescription: "Key Name is required"
 Conditions:
   CreateInfra: !Equals [!Ref CreateNewInfra, "true"]
   UseExistingInfra: !Equals [!Ref CreateNewInfra, "false"]
