@@ -225,6 +225,17 @@ download_cli() {
 
 run_setup() {
     local DOMAIN=${INSTANCE_ADDRESS:-127.0.0.1}
+
+    # check if `INSTANCE_DOMAIN_NAME` is set in the environment variable or /etc/environment
+    if [ -z "$INSTANCE_DOMAIN_NAME" ]; then
+        INSTANCE_DOMAIN_NAME=$(grep INSTANCE_DOMAIN_NAME /etc/environment | cut -d'=' -f2)
+        
+        if [ -n "$INSTANCE_DOMAIN_NAME" ]; then
+            DOMAIN=$INSTANCE_DOMAIN_NAME
+        fi
+    fi
+
+    # Get the domain name from the environment variable
     log "Running setup with domain: $DOMAIN"
     log "Prime Host: $PRIME_HOST"
     update_status "INSTALLING" "Installing Plane with domain: $DOMAIN"

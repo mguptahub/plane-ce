@@ -242,10 +242,14 @@ Outputs:
     Description: Note about the URL of the Plane instance
     Value: !Sub 'The URL of the Plane instance is available in the outputs below. The URL is only available after the instance is created. It might take 5-15 min based on the region and instance type'
 
-  PlaneUrl:
-    Description: URL of the Plane instance
-    Value: !If [UseExistingInfra, !Sub 'http://${EC2Instance.PrivateIp}', !Sub 'http://${EC2Instance.PublicIp}']
+  DomainUrl:
+    Description: Domain URL of the Plane instance
+    Value: !Sub 'http://${InstanceDomainName}'
 
+  IPBasedUrl:
+    Description: IP based URL of the Plane instance
+    Value: !If [UseExistingInfra, !Sub 'http://${InstanceDomainName}', !Sub 'http://${EC2Instance.PublicIp}']
+  
   InstanceId:
     Description: ID of the EC2 instance
     Value: !Ref EC2Instance
