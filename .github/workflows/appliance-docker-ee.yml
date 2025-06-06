@@ -23,7 +23,7 @@ env:
   PRIME_HOST: ${{ inputs.prime_host || 'https://prime.plane.so' }}
   AMI_PUBLISH_REGION: ${{ inputs.ami_publish_region || 'us-east-1' }}
   # Inputs by Devops
-  AWS_MANIFEST_BUCKET: 'plane-terraform-state-dev'
+  AWS_MANIFEST_BUCKET: 'plane-terraform-marketplace'
   AWS_VPC_CIDR: '10.34.0.0/16'
   AWS_SUBNET_CIDR: '10.34.1.0/24'
   AWS_VPC_REGION: 'us-east-1'
