@@ -210,6 +210,7 @@ build {
       "sudo rm /etc/update-motd.d/99-plane-status",
       "sudo rm /var/lib/cloud/instance/plane-setup-complete",
       "sudo rm /var/lib/cloud/instance/plane-setup-status",
+      "sudo rm /var/log/plane-setup.log",
       "sudo rm -rf /home/ubuntu/cloud-init"
     ]
   }
