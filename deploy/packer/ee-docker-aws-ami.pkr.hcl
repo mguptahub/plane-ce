@@ -136,83 +136,83 @@ build {
 
 
   # Copy application files
-  provisioner "shell" {
-    environment_vars = [
-      "DEBIAN_FRONTEND=noninteractive",
-      "TERM=xterm-256color"
-    ]
-    inline = [
-      "sudo rm -rf /var/lib/apt/lists/*",
-      "sudo mkdir -p /var/lib/apt/lists/partial",
-      "for i in {1..3}; do sudo apt-get update && break || sleep 10; done",
-      "sudo apt-get install -y cloud-init",
-      "curl -fsSL https://get.docker.com | sudo sh -",
-      "sudo apt-get install -y uidmap",
-      "sudo usermod -aG docker ubuntu",
-      "dockerd-rootless-setuptool.sh install",
-      "mkdir -p /home/ubuntu/cloud-init",
-    ]
-    timeout = "30m"
-  }
+  # provisioner "shell" {
+  #   environment_vars = [
+  #     "DEBIAN_FRONTEND=noninteractive",
+  #     "TERM=xterm-256color"
+  #   ]
+  #   inline = [
+  #     "sudo rm -rf /var/lib/apt/lists/*",
+  #     "sudo mkdir -p /var/lib/apt/lists/partial",
+  #     "for i in {1..3}; do sudo apt-get update && break || sleep 10; done",
+  #     "sudo apt-get install -y cloud-init",
+  #     "curl -fsSL https://get.docker.com | sudo sh -",
+  #     "sudo apt-get install -y uidmap",
+  #     "sudo usermod -aG docker ubuntu",
+  #     "dockerd-rootless-setuptool.sh install",
+  #     "mkdir -p /home/ubuntu/cloud-init",
+  #   ]
+  #   timeout = "30m"
+  # }
 
-  # set prime host to instance environment variable
-  provisioner "shell" {
-    inline = [
-      "sudo bash -c 'echo PRIME_HOST=${var.prime_host} >> /etc/environment'"
-    ]
-  }
+  # # set prime host to instance environment variable
+  # provisioner "shell" {
+  #   inline = [
+  #     "sudo bash -c 'echo PRIME_HOST=${var.prime_host} >> /etc/environment'"
+  #   ]
+  # }
 
-  provisioner "file" {
-    source      = "plane-dist/"
-    destination = "/home/ubuntu/cloud-init"
-  }
+  # provisioner "file" {
+  #   source      = "plane-dist/"
+  #   destination = "/home/ubuntu/cloud-init"
+  # }
 
-  provisioner "shell" {
-    environment_vars = [
-      "DEBIAN_FRONTEND=noninteractive",
-      "TERM=xterm-256color",
-    ]
-    inline = [
-      "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
-      "sudo mv /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
-      "sudo chmod +x /usr/local/bin/verify-plane-setup"
-    ]
-  }
+  # provisioner "shell" {
+  #   environment_vars = [
+  #     "DEBIAN_FRONTEND=noninteractive",
+  #     "TERM=xterm-256color",
+  #   ]
+  #   inline = [
+  #     "sudo mv /home/ubuntu/cloud-init/99_plane.cfg /etc/cloud/cloud.cfg.d/99_plane.cfg",
+  #     "sudo mv /home/ubuntu/cloud-init/verify-plane-setup /usr/local/bin/verify-plane-setup",
+  #     "sudo chmod +x /usr/local/bin/verify-plane-setup"
+  #   ]
+  # }
 
-  provisioner "shell" {
-    environment_vars = [
-      "DEBIAN_FRONTEND=noninteractive",
-      "TERM=xterm-256color",
-      "PRIME_HOST=${var.prime_host}"
-    ]
-    inline = [
-      "sudo /usr/local/bin/verify-plane-setup --prime-host=${var.prime_host}",
-    ]
-    timeout = "30m"
-  }
+  # provisioner "shell" {
+  #   environment_vars = [
+  #     "DEBIAN_FRONTEND=noninteractive",
+  #     "TERM=xterm-256color",
+  #     "PRIME_HOST=${var.prime_host}"
+  #   ]
+  #   inline = [
+  #     "sudo /usr/local/bin/verify-plane-setup --prime-host=${var.prime_host}",
+  #   ]
+  #   timeout = "30m"
+  # }
 
-  provisioner "shell" {
-    environment_vars = [
-      "DEBIAN_FRONTEND=noninteractive",
-      "TERM=xterm-256color",
-    ]
-    inline = [
-      "sudo prime-cli uninstall -s",
-    ]
-  }
+  # provisioner "shell" {
+  #   environment_vars = [
+  #     "DEBIAN_FRONTEND=noninteractive",
+  #     "TERM=xterm-256color",
+  #   ]
+  #   inline = [
+  #     "sudo prime-cli uninstall -s",
+  #   ]
+  # }
 
-  provisioner "shell" {
-    environment_vars = [
-      "DEBIAN_FRONTEND=noninteractive",
-      "TERM=xterm-256color",
-    ]
-    inline = [
-      "sudo rm /etc/update-motd.d/99-plane-status",
-      "sudo rm /var/lib/cloud/instance/plane-setup-complete",
-      "sudo rm /var/lib/cloud/instance/plane-setup-status",
-      "sudo rm -rf /home/ubuntu/cloud-init"
-    ]
-  }
+  # provisioner "shell" {
+  #   environment_vars = [
+  #     "DEBIAN_FRONTEND=noninteractive",
+  #     "TERM=xterm-256color",
+  #   ]
+  #   inline = [
+  #     "sudo rm /etc/update-motd.d/99-plane-status",
+  #     "sudo rm /var/lib/cloud/instance/plane-setup-complete",
+  #     "sudo rm /var/lib/cloud/instance/plane-setup-status",
+  #     "sudo rm -rf /home/ubuntu/cloud-init"
+  #   ]
+  # }
 
   # Post-processor for potential AMI modifications
   post-processor "manifest" {
